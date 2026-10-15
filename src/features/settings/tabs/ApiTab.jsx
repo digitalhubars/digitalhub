@@ -5,7 +5,7 @@ import { useApp } from '../../../context/AppContext';
 import { ui } from '../../../styles/ui';
 import CopyField from '../CopyField';
 
-const project = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'your-project';
+const project = 'your-project';
 const webhookUrl = (storeId) => `https://asia-southeast1-${project}.cloudfunctions.net/wooWebhook?store=${storeId}`;
 
 // WooCommerce webhooks are created automatically when a store first syncs.

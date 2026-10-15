@@ -9,7 +9,7 @@ import Callout from '../../components/ui/Callout';
 import Field from '../../components/ui/Field';
 import { isEmail } from '../../lib/format';
 import { authMessage, signIn, watchAuth } from '../../lib/auth';
-import { firebaseConfigured } from '../../lib/firebase/client';
+import { pbConfigured } from '../../lib/pocketbase';
 import SetupNotice from './SetupNotice';
 import { ui } from '../../styles/ui';
 import AuthShell from './AuthShell';
@@ -28,7 +28,7 @@ export default function SignInForm() {
   const notice = MESSAGES[params.get('message')];
 
   // Already signed in → straight to the dashboard.
-  useEffect(() => (firebaseConfigured ? watchAuth((u) => u && router.replace('/dashboard')) : undefined), [router]);
+  useEffect(() => (pbConfigured ? watchAuth((u) => u && router.replace('/dashboard')) : undefined), [router]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -46,7 +46,7 @@ export default function SignInForm() {
     return router.replace(safeNext(params.get('next')));
   };
 
-  if (!firebaseConfigured) {
+  if (!pbConfigured) {
     return (
       <AuthShell title="Sign in">
         <SetupNotice />

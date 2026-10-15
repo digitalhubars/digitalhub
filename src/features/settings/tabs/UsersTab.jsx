@@ -174,7 +174,7 @@ function AddUserModal({ onClose, onSaved }) {
   );
 }
 
-// Firebase accounts (users collection). Admin-only tab; firestore.rules allow these changes only for admins.
+// PocketBase user accounts. Admin-only tab; only admins can adjust access.
 export default function UsersTab() {
   const { groups, clients, users: accounts, profile: me, log, showToast, askConfirm } = useApp();
   const [editing, setEditing] = useState(null);
@@ -218,7 +218,7 @@ export default function UsersTab() {
     >
       <p className={`px-4 pt-4 text-sm sm:px-5 ${ui.muted}`}>
         People who sign up themselves start as clients with no stores. Give managers a store group and clients a client account so they can see their
-        dashboard. Sign-in is handled by Firebase; suspended accounts can’t sign in.
+        dashboard. Sign-in is handled by PocketBase; suspended accounts can’t sign in.
       </p>
       <DataTable
         rows={accounts}

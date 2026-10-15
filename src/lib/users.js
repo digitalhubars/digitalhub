@@ -1,5 +1,5 @@
-import { deleteDoc, doc, setDoc, updateDoc } from './firebase/client';
-import { fb } from './firebase/client';
+import { deleteDoc, doc } from './pocketbase';
+import { fb } from './pocketbase';
 
 export async function adminCreateUser({ email, password, fullName, role, groupId, clientId }) {
   const users = JSON.parse(localStorage.getItem('digital-hub-users') || '{}');

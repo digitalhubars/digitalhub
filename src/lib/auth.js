@@ -1,5 +1,6 @@
+import PocketBase from 'pocketbase';
 import { isOwnerEmail } from '../config/owner';
-import { clearAuthSession, doc, getAuthSession, getDoc, setAuthSession, setDoc, updateDoc } from './firebase/client';
+import { pb, getCurrentUser } from './pocketbase';
 
 const FRIENDLY = {
   'auth/invalid-credential': 'Email or password is wrong.',
@@ -16,158 +17,128 @@ const FRIENDLY = {
   unavailable: 'Can’t reach the database. Check your connection and try again.',
 };
 
-const readUsers = () => {
-  try {
-    return JSON.parse(localStorage.getItem('digital-hub-users') || '{}');
-  } catch {
-    return {};
-  }
-};
-
-const writeUsers = (next) => {
-  localStorage.setItem('digital-hub-users', JSON.stringify(next));
-};
-
-const readProfiles = () => {
-  try {
-    return JSON.parse(localStorage.getItem('digital-hub-profiles') || '{}');
-  } catch {
-    return {};
-  }
-};
-
-const writeProfiles = (next) => {
-  localStorage.setItem('digital-hub-profiles', JSON.stringify(next));
-};
-
 export const authMessage = (err) => FRIENDLY[err?.code] || err?.message || 'Something went wrong.';
 
 export const watchAuth = (callback) => {
-  if (typeof window === 'undefined') return () => {};
-  const emit = () => callback(getAuthSession());
-  emit();
-  window.addEventListener('digital-hub-auth', emit);
-  return () => window.removeEventListener('digital-hub-auth', emit);
+  const authModel = getCurrentUser();
+  callback(authModel);
+  const unsubscribe = pb.authStore.onChange((token, model) => {
+    callback(model ? { ...model, id: model.id, uid: model.id, displayName: model.full_name || model.name || model.email || '' } : null);
+  });
+  return unsubscribe || (() => {});
 };
 
 async function seedWorkspace() {
-  await setDoc(doc(null, 'workspace/settings'), { workspaceName: 'Digital Hub', currency: 'USD', lowStockThreshold: 10 }, { merge: true });
-  await setDoc(doc(null, 'groups/g_main'), { name: 'Main' }, { merge: true });
+  try {
+    await pb.collection('workspace').create({ id: 'settings', workspaceName: 'Digital Hub', currency: 'USD', lowStockThreshold: 10 });
+  } catch (err) {
+    if (err?.status !== 409) throw err;
+  }
+  try {
+    await pb.collection('groups').create({ id: 'g_main', name: 'Main' });
+  } catch (err) {
+    if (err?.status !== 409) throw err;
+  }
 }
 
 export async function ensureProfile(fullName = '') {
-  const user = getAuthSession();
+  const user = getCurrentUser();
   if (!user) throw new Error('Sign in first.');
 
   const owner = isOwnerEmail(user.email);
-  const profiles = readProfiles();
-  const uid = String(user.uid || user.id || user.email);
-  const existing = profiles[uid];
+  let profile = null;
 
-  if (!existing) {
-    const profile = {
-      id: uid,
+  try {
+    profile = await pb.collection('users').getOne(user.id);
+  } catch (err) {
+    if (err?.status !== 404) throw err;
+  }
+
+  const nextName = String(fullName || user.displayName || user.name || '').trim().slice(0, 120);
+
+  if (!profile) {
+    const created = await pb.collection('users').create({
+      id: user.id,
       email: user.email,
-      full_name: String(fullName || user.displayName || user.name || '').trim().slice(0, 120),
+      full_name: nextName,
       phone: '',
       role: owner ? 'admin' : 'client',
       group_id: null,
       client_id: null,
       status: 'active',
       created_at: new Date().toISOString(),
-    };
-    profiles[uid] = profile;
-    writeProfiles(profiles);
+      password: '',
+    });
     if (owner) await seedWorkspace();
-    return { created: true, role: profile.role };
+    return { created: true, role: created.role || (owner ? 'admin' : 'client') };
   }
 
-  const current = existing;
-  if (user.email && current.email !== user.email) {
-    current.email = user.email;
-    profiles[uid] = current;
-    writeProfiles(profiles);
+  if (user.email && profile.email !== user.email) {
+    profile = await pb.collection('users').update(profile.id, { email: user.email });
   }
-  if (owner && current.role === 'client' && !current.client_id) {
-    current.role = 'admin';
-    profiles[uid] = current;
-    writeProfiles(profiles);
+
+  if (owner && profile.role === 'client' && !profile.client_id) {
+    profile = await pb.collection('users').update(profile.id, { role: 'admin' });
     await seedWorkspace();
     return { created: false, role: 'admin' };
   }
-  return { created: false, role: current.role };
+
+  return { created: false, role: profile.role || 'client' };
 }
 
 export const resendVerification = () => Promise.resolve();
 
 export async function signIn(email, password) {
-  const users = readUsers();
-  const normalizedEmail = email.trim().toLowerCase();
-  const entry = Object.values(users).find((u) => u.email && u.email.toLowerCase() === normalizedEmail && u.password === password);
-  if (!entry) throw new Error('auth/invalid-credential');
-  const user = { uid: entry.id, id: entry.id, email: entry.email, name: entry.fullName || entry.full_name || entry.email, displayName: entry.fullName || entry.full_name || entry.email };
-  setAuthSession(user);
-  await ensureProfile(user.displayName || '');
+  const authData = await pb.collection('users').authWithPassword(email.trim(), password);
+  const user = authData?.record || authData?.user || getCurrentUser();
+  await ensureProfile(user.full_name || user.name || '');
   return user;
 }
 
 export async function signUp({ email, password, fullName }) {
-  const users = readUsers();
-  const normalizedEmail = email.trim().toLowerCase();
-  if (Object.values(users).some((u) => u.email && u.email.toLowerCase() === normalizedEmail)) {
-    throw new Error('auth/email-already-in-use');
+  const emailValue = email.trim();
+  const fullNameValue = String(fullName || '').trim();
+
+  try {
+    await pb.collection('users').create({
+      email: emailValue,
+      password,
+      passwordConfirm: password,
+      full_name: fullNameValue,
+      phone: '',
+      role: 'client',
+      group_id: null,
+      client_id: null,
+      status: 'active',
+      created_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    if (err?.status === 400 || err?.status === 409 || err?.message?.includes('already')) {
+      throw new Error('auth/email-already-in-use');
+    }
+    throw err;
   }
-  const id = `u_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
-  const profile = {
-    id,
-    email: email.trim(),
-    password,
-    fullName: fullName.trim(),
-    role: 'client',
-    group_id: null,
-    client_id: null,
-    status: 'active',
-    created_at: new Date().toISOString(),
-  };
-  users[id] = profile;
-  writeUsers(users);
-  const authUser = { uid: id, id, email: email.trim(), name: fullName.trim(), displayName: fullName.trim() };
-  setAuthSession(authUser);
-  await ensureProfile(fullName.trim());
-  return { created: true, role: 'client' };
+
+  const authData = await pb.collection('users').authWithPassword(emailValue, password);
+  await ensureProfile(fullNameValue);
+  return authData.record || authData.user || getCurrentUser();
 }
 
-export const signOut = () => clearAuthSession();
-export const sendReset = () => Promise.resolve();
+export const signOut = async () => pb.authStore.clear();
+
+export const sendReset = (email) => pb.collection('users').requestPasswordReset(email.trim());
 
 export async function changePassword(current, next) {
-  const session = getAuthSession();
-  if (!session) throw new Error('Sign in first.');
-  const users = readUsers();
-  const target = Object.values(users).find((u) => u.id === session.uid);
-  if (!target || current !== target.password) throw new Error('auth/invalid-credential');
-  target.password = next;
-  writeUsers(users);
+  const user = getCurrentUser();
+  if (!user) throw new Error('Sign in first.');
+  await pb.collection('users').authWithPassword(user.email, current);
+  await pb.collection('users').update(user.id, { password: next, passwordConfirm: next });
   return true;
 }
 
 export async function updateOwnProfile(uid, { full_name, phone, email }) {
-  const profiles = readProfiles();
-  const profile = profiles[uid] || { id: uid };
-  profile.full_name = full_name;
-  profile.phone = phone;
-  profiles[uid] = profile;
-  writeProfiles(profiles);
-  const current = getAuthSession();
-  if (email && current && current.email && email.trim().toLowerCase() !== current.email.toLowerCase()) {
-    current.email = email.trim();
-    setAuthSession(current);
-    const users = readUsers();
-    const user = Object.values(users).find((u) => u.id === uid);
-    if (user) {
-      user.email = email.trim();
-      writeUsers(users);
-    }
-  }
-  return { emailPending: false };
+  const patch = { full_name, phone };
+  if (email) patch.email = email.trim();
+  const updated = await pb.collection('users').update(uid, patch);
+  return { emailPending: false, record: updated };
 }

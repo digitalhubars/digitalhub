@@ -1,5 +1,5 @@
-import { arrayRemove, collection, deleteDoc, doc, getDocs, query, where, writeBatch } from './firebase/client';
-import { fb } from './firebase/client';
+import { arrayRemove, collection, deleteDoc, doc, getDocs, query, where, writeBatch } from './pocketbase';
+import { fb } from './pocketbase';
 
 // Admin-only fallback for disconnecting a store when the sync functions aren't deployed.
 // Deletes Digital Hub's copy only (plain deletes, not "pending" deletes, so nothing is

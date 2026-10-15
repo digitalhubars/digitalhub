@@ -1,11 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { collection, doc, limit, orderBy, query, setDoc, where } from '../lib/firebase/client';
+import { collection, doc, limit, orderBy, query, setDoc, where } from '../lib/pocketbase';
 import { defaultSettings, isOAuthPlatform, PLATFORMS, sessions as initialSessions } from '../data';
 import { canVisitPage, routePath, settingsTabsFor } from '../config/navigation';
 import { getAccess } from '../config/roles';
-import { signOut as firebaseSignOut, updateOwnProfile, authMessage } from '../lib/auth';
-import { call, fb } from '../lib/firebase/client';
-import { useLiveDoc, useLiveList, waitForSync } from '../lib/firebase/live';
+import { signOut as appSignOut, updateOwnProfile, authMessage } from '../lib/auth';
+import { call, fb } from '../lib/pocketbase';
+import { useLiveDoc, useLiveList, waitForSync } from '../lib/live';
 import { diffFields, formatMoney, uid } from '../lib/format';
 import { removeStoreData } from '../lib/removeStoreData';
 import { loadSampleData as seedSampleData, removeSampleData as clearSampleData } from '../lib/sampleData';
@@ -24,10 +24,10 @@ const withoutKey = (obj, key) => {
 const byNewest = (field) => (a, b) => (b[field] || 0) - (a[field] || 0);
 
 // Cloud Functions errors in plain words. "not-found"/"internal" usually mean the sync
-// functions aren't deployed yet (they need the Firebase Blaze plan).
+// functions aren’t deployed yet; the sync layer can be enabled when the backend is ready.
 const callError = (err) =>
   ['functions/not-found', 'functions/internal', 'functions/unavailable'].includes(err?.code)
-    ? 'Live WooCommerce sync isn’t switched on yet. The Firebase project needs the Blaze plan, then the sync functions can be deployed.'
+    ? 'Live WooCommerce sync isn’t switched on yet. Enable the sync layer in PocketBase, then the sync functions can be deployed.'
     : err?.message || 'Something went wrong.';
 
 /**
@@ -617,7 +617,7 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
   };
 
   const signOut = async () => {
-    await firebaseSignOut();
+    await appSignOut();
     window.location.assign('/signin?message=signed-out');
   };
 

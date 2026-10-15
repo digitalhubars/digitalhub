@@ -30,7 +30,7 @@ export default function PasswordPage() {
     setError('');
     setBusy(true);
     try {
-      // Firebase re-checks the current password before changing it.
+      // PocketBase re-checks the current password before changing it.
       await changePassword(form.current, form.next);
     } catch (err) {
       setBusy(false);

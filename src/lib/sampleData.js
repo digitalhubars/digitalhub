@@ -1,6 +1,6 @@
-import { doc, writeBatch } from './firebase/client';
+import { doc, writeBatch } from './pocketbase';
 import { clients, customers, groups, orders, products, stores } from '../data';
-import { fb } from './firebase/client';
+import { fb } from './pocketbase';
 
 // The demo stores (marked `sample: true`) so the dashboards have something to show.
 // The sync functions never contact a real store for them.

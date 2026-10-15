@@ -2,18 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { doc, onSnapshot } from '../../lib/firebase/client';
+import { doc, onSnapshot } from '../../lib/pocketbase';
 import { parseRoute } from '../../config/navigation';
 import { AppProvider } from '../../context/AppContext';
 import { authMessage, ensureProfile, watchAuth } from '../../lib/auth';
-import { fb, firebaseConfigured } from '../../lib/firebase/client';
+import { fb, pbConfigured } from '../../lib/pocketbase';
 import AccountBlocked from '../auth/AccountBlocked';
 import AuthShell from '../auth/AuthShell';
 import SetupNotice from '../auth/SetupNotice';
 import AppShell from './AppShell';
 import { Loading } from './ClientApp';
 
-// Signed-in area: waits for Firebase Auth and the user's profile, then draws the app.
+// Signed-in area: waits for PocketBase auth and the user's profile, then draws the app.
 export default function AppRoot() {
   const pathname = usePathname();
   const router = useRouter();
@@ -21,7 +21,7 @@ export default function AppRoot() {
   const [profile, setProfile] = useState(undefined);
   const [error, setError] = useState('');
 
-  useEffect(() => (firebaseConfigured ? watchAuth((u) => setAuthUser(u)) : undefined), []);
+  useEffect(() => (pbConfigured ? watchAuth((u) => setAuthUser(u)) : undefined), []);
 
   // Live profile: role changes made by an admin apply right away.
   useEffect(() => {
@@ -51,9 +51,9 @@ export default function AppRoot() {
   const route = useMemo(() => parseRoute(pathname, profile?.role || 'client'), [pathname, profile?.role]);
   const navigate = useCallback((path, { replace = false } = {}) => (replace ? router.replace(path) : router.push(path)), [router]);
 
-  if (!firebaseConfigured) {
+  if (!pbConfigured) {
     return (
-      <AuthShell title="Firebase isn’t connected yet">
+      <AuthShell title="PocketBase isn’t connected yet">
         <SetupNotice />
       </AuthShell>
     );

@@ -20,7 +20,7 @@ function WorkspaceDataCard() {
     <Card title="Workspace data">
       <div className="space-y-4 p-4 sm:p-5">
         <p className={`text-sm ${ui.muted}`}>
-          Everything is saved in your Firebase database and updates live on every open screen. Download a backup any time.
+          Everything is saved in your PocketBase workspace and updates live on every open screen. Download a backup any time.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button onClick={exportBackup}>

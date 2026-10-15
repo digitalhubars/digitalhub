@@ -10,7 +10,7 @@ import Field from '../../components/ui/Field';
 import PasswordStrength from '../../components/ui/PasswordStrength';
 import { isEmail } from '../../lib/format';
 import { authMessage, signUp, watchAuth } from '../../lib/auth';
-import { firebaseConfigured } from '../../lib/firebase/client';
+import { pbConfigured } from '../../lib/pocketbase';
 import SetupNotice from './SetupNotice';
 import { MIN_STRENGTH, passwordStrength } from '../../lib/password';
 import { ui } from '../../styles/ui';
@@ -23,7 +23,7 @@ export default function SignUpForm() {
   const [busy, setBusy] = useState(false);
   const bind = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
-  useEffect(() => (firebaseConfigured ? watchAuth((u) => u && !busy && router.replace('/dashboard')) : undefined), [router, busy]);
+  useEffect(() => (pbConfigured ? watchAuth((u) => u && !busy && router.replace('/dashboard')) : undefined), [router, busy]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -44,7 +44,7 @@ export default function SignUpForm() {
     return router.replace('/dashboard');
   };
 
-  if (!firebaseConfigured) {
+  if (!pbConfigured) {
     return (
       <AuthShell title="Create an account">
         <SetupNotice />
