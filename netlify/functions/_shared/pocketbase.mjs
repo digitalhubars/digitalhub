@@ -13,11 +13,51 @@ function required(name) {
   return value;
 }
 
+export function getPocketBaseUrl() {
+  return process.env.PB_URL?.trim() || process.env.NEXT_PUBLIC_PB_URL?.trim() || '';
+}
+
+export function serviceEnvironmentStatus(storeSuffixes = []) {
+  const status = {
+    PB_URL: Boolean(process.env.PB_URL?.trim()),
+    NEXT_PUBLIC_PB_URL: Boolean(process.env.NEXT_PUBLIC_PB_URL?.trim()),
+    PB_SERVICE_EMAIL: Boolean(process.env.PB_SERVICE_EMAIL?.trim()),
+    PB_SERVICE_PASSWORD: Boolean(process.env.PB_SERVICE_PASSWORD?.trim()),
+  };
+  for (const suffix of storeSuffixes) {
+    for (const ending of ['CONSUMER_KEY', 'CONSUMER_SECRET', 'WEBHOOK_SECRET']) {
+      const name = `WC_STORE_${suffix}_${ending}`;
+      status[name] = Boolean(process.env[name]?.trim());
+    }
+  }
+  return status;
+}
+
+export function missingServiceEnvironment(store, includeWebhookSecret = false) {
+  const status = serviceEnvironmentStatus(store ? [storeEnvSuffix(store.recordKey)] : []);
+  const missing = [];
+  if (!status.PB_URL && !status.NEXT_PUBLIC_PB_URL) missing.push('PB_URL or NEXT_PUBLIC_PB_URL');
+  for (const name of ['PB_SERVICE_EMAIL', 'PB_SERVICE_PASSWORD']) if (!status[name]) missing.push(name);
+  if (store) {
+    const suffix = storeEnvSuffix(store.recordKey);
+    for (const name of [`WC_STORE_${suffix}_CONSUMER_KEY`, `WC_STORE_${suffix}_CONSUMER_SECRET`]) {
+      if (!status[name]) missing.push(name);
+    }
+    const webhookName = `WC_STORE_${suffix}_WEBHOOK_SECRET`;
+    if (includeWebhookSecret && !status[webhookName]) missing.push(webhookName);
+  }
+  return missing;
+}
+
 export function newPocketBase() {
-  return new PocketBase(required('PB_URL'));
+  const url = getPocketBaseUrl();
+  if (!url) throw new HttpError(500, 'Missing Netlify environment variables: PB_URL or NEXT_PUBLIC_PB_URL.');
+  return new PocketBase(url);
 }
 
 export async function getServicePocketBase() {
+  const missing = missingServiceEnvironment();
+  if (missing.length) throw new HttpError(500, `Missing Netlify environment variables: ${missing.join(', ')}.`);
   const pb = newPocketBase();
   const auth = await pb.collection('users').authWithPassword(
     required('PB_SERVICE_EMAIL'),
@@ -30,6 +70,11 @@ export async function getServicePocketBase() {
 }
 
 export async function authenticateAppRequest(event) {
+  const { record } = await getAuthenticatedAppRequest(event);
+  return record;
+}
+
+export async function getAuthenticatedAppRequest(event) {
   const authorization = event.headers?.authorization || event.headers?.Authorization || '';
   const token = authorization.replace(/^Bearer\s+/i, '').trim();
   if (!token) throw new HttpError(401, 'Sign in to run this action.');
@@ -41,7 +86,7 @@ export async function authenticateAppRequest(event) {
     if (auth.record?.status !== 'active' || !['admin', 'manager'].includes(auth.record?.role)) {
       throw new HttpError(403, 'Only active admins and managers can run store sync actions.');
     }
-    return auth.record;
+    return { pb, record: auth.record };
   } catch (error) {
     if (error instanceof HttpError) throw error;
     throw new HttpError(401, 'Your PocketBase session is invalid or expired. Sign in again.');
@@ -95,8 +140,10 @@ export function storeEnvSuffix(storeId) {
 
 export function getWooCredentials(store) {
   const suffix = storeEnvSuffix(store.recordKey);
-  const consumerKey = required(`WC_STORE_${suffix}_CONSUMER_KEY`);
-  const consumerSecret = required(`WC_STORE_${suffix}_CONSUMER_SECRET`);
+  const missing = missingServiceEnvironment(store).filter((name) => name.startsWith('WC_STORE_'));
+  if (missing.length) throw new HttpError(500, `Missing Netlify environment variables: ${missing.join(', ')}.`);
+  const consumerKey = process.env[`WC_STORE_${suffix}_CONSUMER_KEY`].trim();
+  const consumerSecret = process.env[`WC_STORE_${suffix}_CONSUMER_SECRET`].trim();
   const url = String(store.url || '').trim().replace(/\/+$/, '');
   let parsed;
   try {

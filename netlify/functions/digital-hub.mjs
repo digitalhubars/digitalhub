@@ -1,10 +1,13 @@
 import {
   deleteRecord,
-  authenticateAppRequest,
+  getAuthenticatedAppRequest,
   getRecordByKey,
   getServicePocketBase,
   HttpError,
   jsonResponse,
+  missingServiceEnvironment,
+  serviceEnvironmentStatus,
+  storeEnvSuffix,
 } from './_shared/pocketbase.mjs';
 import { syncWooStore, testWooConnection } from './_shared/woocommerce.mjs';
 
@@ -32,31 +35,35 @@ export async function handler(event) {
   if (event.httpMethod !== 'POST') return jsonResponse(405, { ok: false, message: 'Use POST for sync actions.' });
 
   try {
-    const caller = await authenticateAppRequest(event);
+    const { pb: callerPb, record: caller } = await getAuthenticatedAppRequest(event);
     const body = JSON.parse(event.body || '{}');
     const action = body.action;
     const payload = body.payload || {};
-    const pb = await getServicePocketBase();
 
-    if (action === 'syncStore' || action === 'testWooConnection' || action === 'disconnectStore') {
-      if (!payload.storeId) throw new HttpError(400, 'A storeId is required.');
-      const store = await getRecordByKey(pb, 'stores', payload.storeId);
-      if (caller.role === 'manager' && (!caller.group_id || caller.group_id !== store.groupId)) {
-        throw new HttpError(403, 'You do not have access to this store.');
-      }
-      if (store.platform !== 'WooCommerce') throw new HttpError(400, 'Only WooCommerce stores are supported by this sync endpoint.');
-
-      if (action === 'syncStore') {
-        const result = await syncWooStore(pb, store);
-        return jsonResponse(200, { ok: true, ...result });
-      }
-      if (action === 'testWooConnection') {
-        return jsonResponse(200, await testWooConnection(pb, store));
-      }
-      return jsonResponse(200, await disconnectStore(pb, payload.storeId));
+    if (action === 'diagnostics') {
+      if (caller.role !== 'admin') throw new HttpError(403, 'Only admins can inspect server environment status.');
+      const stores = await callerPb.collection('stores').getFullList({ filter: 'platform = "WooCommerce"' });
+      const status = serviceEnvironmentStatus(stores.map((store) => storeEnvSuffix(store.recordKey)));
+      return jsonResponse(200, status);
     }
 
-    throw new HttpError(404, `Unknown sync action: ${String(action || '')}`);
+    if (!['syncStore', 'testWooConnection', 'disconnectStore'].includes(action)) {
+      throw new HttpError(404, `Unknown sync action: ${String(action || '')}`);
+    }
+    if (!payload.storeId) throw new HttpError(400, 'A storeId is required.');
+    const visibleStore = await getRecordByKey(callerPb, 'stores', payload.storeId);
+    if (caller.role === 'manager' && (!caller.group_id || caller.group_id !== visibleStore.groupId)) {
+      throw new HttpError(403, 'You do not have access to this store.');
+    }
+    const missing = missingServiceEnvironment(action === 'disconnectStore' ? null : visibleStore);
+    if (missing.length) throw new HttpError(500, `Missing Netlify environment variables: ${missing.join(', ')}.`);
+
+    const pb = await getServicePocketBase();
+    const store = await getRecordByKey(pb, 'stores', payload.storeId);
+    if (action === 'disconnectStore') return jsonResponse(200, await disconnectStore(pb, payload.storeId));
+    if (store.platform !== 'WooCommerce') throw new HttpError(400, 'Only WooCommerce stores are supported by this sync endpoint.');
+    if (action === 'syncStore') return jsonResponse(200, { ok: true, ...(await syncWooStore(pb, store)) });
+    return jsonResponse(200, await testWooConnection(pb, store));
   } catch (error) {
     const statusCode = error instanceof HttpError ? error.statusCode : 500;
     console.error('Digital Hub Netlify function failed:', error?.message || error);
