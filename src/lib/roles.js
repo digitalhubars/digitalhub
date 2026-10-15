@@ -2,6 +2,16 @@ import { useEffect, useState } from 'react';
 import { pb } from './pocketbase';
 
 export const ACCESS_ROLES = ['admin', 'manager', 'staff'];
+export const ACCESS_PAGES = [
+  'dashboard', 'products', 'orders', 'customers', 'clients', 'integrations', 'settings',
+  'settings.general', 'settings.users', 'settings.clients', 'settings.groups', 'settings.sync',
+  'settings.api', 'settings.access', 'settings.notifications', 'settings.appearance',
+  'settings.security', 'settings.activity', 'settings.support', 'profile', 'password', 'role-access',
+];
+
+const ADMIN_PERMISSIONS = Object.fromEntries(
+  ACCESS_PAGES.map((page) => [page, { canView: true, canEdit: true, canDelete: true }]),
+);
 
 export function getCurrentRole() {
   const role = pb.authStore.record?.role;
@@ -10,6 +20,7 @@ export function getCurrentRole() {
 
 export async function loadRolePermissions(role = getCurrentRole()) {
   if (!ACCESS_ROLES.includes(role)) return {};
+  if (role === 'admin') return ADMIN_PERMISSIONS;
   const rows = await pb.collection('role_access').getFullList({
     filter: pb.filter('role = {:role}', { role }),
   });
@@ -18,10 +29,12 @@ export async function loadRolePermissions(role = getCurrentRole()) {
 
 export function canRole(role, permissions, page, action = 'canView') {
   if (!ACCESS_ROLES.includes(role) || !['canView', 'canEdit', 'canDelete'].includes(action)) return false;
+  if (role === 'admin') return true;
   return permissions?.[page]?.[action] === true;
 }
 
 export function hasAnyRoleAccess(role, permissions) {
+  if (role === 'admin') return true;
   return ACCESS_ROLES.includes(role) && Object.values(permissions || {}).some((permission) => permission.canView === true);
 }
 
@@ -41,6 +54,13 @@ export function useRoleAccess(role) {
       return undefined;
     }
 
+    if (role === 'admin') {
+      setPermissions(ADMIN_PERMISSIONS);
+      setLoading(false);
+      setError(null);
+      return undefined;
+    }
+
     setLoading(true);
     setError(null);
     const refresh = async () => {
@@ -48,6 +68,7 @@ export function useRoleAccess(role) {
         const next = await loadRolePermissions(role);
         if (active) setPermissions(next);
       } catch (reason) {
+        console.error(`Failed to load PocketBase role_access permissions for role "${role}":`, reason);
         if (active) {
           setPermissions({});
           setError(reason);
@@ -61,6 +82,7 @@ export function useRoleAccess(role) {
       if (active) unsubscribe = stop;
       else stop();
     }).catch((reason) => {
+      console.error(`Failed to subscribe to PocketBase role_access for role "${role}":`, reason);
       if (active) setError(reason);
     });
     refresh();

@@ -27,7 +27,8 @@ export async function ensureProfile() {
 export const resendVerification = () => Promise.resolve();
 
 export async function signIn(email, password) {
-  const authData = await pb.collection('users').authWithPassword(email.trim(), password);
+  await pb.collection('users').authWithPassword(email.trim(), password);
+  const authData = await pb.collection('users').authRefresh();
   const user = authData?.record || authData?.user || getCurrentUser();
   await ensureProfile(user.full_name || user.name || '');
   return user;

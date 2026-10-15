@@ -32,6 +32,7 @@ export default function RoleAccessPage() {
       setUsers(userRecords);
       setPermissions(permissionRecords);
     } catch (reason) {
+      console.error('Failed to load Role Access admin data from PocketBase:', reason);
       setError(authMessage(reason));
     }
   }, []);
@@ -44,11 +45,17 @@ export default function RoleAccessPage() {
     pb.collection('users').subscribe('*', () => active && refresh()).then((stop) => {
       if (active) stopUsers = stop;
       else stop();
-    }).catch((reason) => active && setError(authMessage(reason)));
+    }).catch((reason) => {
+      console.error('Failed to subscribe to PocketBase users in Role Access:', reason);
+      if (active) setError(authMessage(reason));
+    });
     pb.collection('role_access').subscribe('*', () => active && refresh()).then((stop) => {
       if (active) stopPermissions = stop;
       else stop();
-    }).catch((reason) => active && setError(authMessage(reason)));
+    }).catch((reason) => {
+      console.error('Failed to subscribe to PocketBase role_access:', reason);
+      if (active) setError(authMessage(reason));
+    });
     return () => {
       active = false;
       stopUsers?.();
@@ -147,7 +154,7 @@ export default function RoleAccessPage() {
                         type="checkbox"
                         aria-label={`${ROLE_LABELS[row.role]} ${field.replace('can', '').toLowerCase()} ${row.page}`}
                         checked={row[field] === true}
-                        disabled={Boolean(busy) || (row.role !== 'admin' && field === 'canDelete') || (row.role === 'staff' && field === 'canEdit')}
+                        disabled={Boolean(busy) || row.role === 'admin' || (row.role !== 'admin' && field === 'canDelete') || (row.role === 'staff' && field === 'canEdit')}
                         onChange={() => togglePermission(row, field)}
                         className="h-4 w-4 accent-teal-700"
                       />
