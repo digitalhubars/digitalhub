@@ -140,7 +140,7 @@ const collectionSpecs = [
 ];
 
 const summary = { created: [], updated: [], unchanged: [], migratedClientRoles: 0, repairedUserStatuses: 0, permissionsCreated: 0, permissionsUpdated: 0, emptyPermissionsRepaired: 0 };
-const collectionApi = pb.collection('_collections');
+const collectionApi = pb.collections;
 
 async function findCollection(name) {
   try {
