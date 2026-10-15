@@ -29,6 +29,11 @@ export function timeAgo(ts) {
   return `${days} day${days > 1 ? 's' : ''} ago`;
 }
 
+export function formatLastSync(ts) {
+  const timestamp = Number(ts);
+  return Number.isFinite(timestamp) && timestamp > 0 ? timeAgo(timestamp) : 'Never synced';
+}
+
 export function downloadCsv(filename, rows) {
   if (!rows.length) return;
   const headers = Object.keys(rows[0]);

@@ -19,9 +19,6 @@ export default function IntegrationModal({ store, onClose }) {
     platform: store.platform || 'Shopify',
     name: store.name || '',
     url: store.url || '',
-    token: '',
-    consumerKey: '',
-    consumerSecret: '',
     groupId: store.groupId || groups[0]?.id || '',
     syncFrequency: store.syncFrequency || 'default',
     status: store.status || 'active',
@@ -34,10 +31,9 @@ export default function IntegrationModal({ store, onClose }) {
   const platform = PLATFORMS[form.platform];
   const usesOAuth = platform.auth === 'oauth';
   const isShopify = form.platform === 'Shopify';
-  const platformChanged = !isNew && form.platform !== store.platform;
-  const needsCredentials = isNew || platformChanged;
   const region = form.region || platform.regions?.[0] || '';
   const bind = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+  const storeEnvSuffix = String(store.id || '').toUpperCase().replace(/[^A-Z0-9]/g, '_');
 
   // New marketplace stores default to the Marketplaces group, and back out of it for key-based ones.
   const changePlatform = (next) => {
@@ -70,9 +66,6 @@ export default function IntegrationModal({ store, onClose }) {
         next.url = 'Use the store’s myshopify.com address.';
       }
       if (!isShopify && !/^https:\/\/[^\s.]+\.[^\s]+$/i.test(form.url)) next.url = 'Use the full https:// address of the WordPress site.';
-      if (needsCredentials && isShopify && form.token.length < 8) next.token = 'Paste the Admin API access token.';
-      if (needsCredentials && !isShopify && form.consumerKey.length < 8) next.consumerKey = 'Paste the consumer key.';
-      if (needsCredentials && !isShopify && form.consumerSecret.length < 8) next.consumerSecret = 'Paste the consumer secret.';
     }
     setErrors(next);
     return !Object.keys(next).length;
@@ -80,13 +73,14 @@ export default function IntegrationModal({ store, onClose }) {
 
   const runTest = async () => {
     if (!validate()) return;
+    if (!store.id) {
+      setTest({ state: 'fail', message: 'Save the store first, then configure its server-side Netlify credentials before testing.' });
+      return;
+    }
     setTest({ state: 'checking' });
     const result = await testConnection({
       platform: form.platform,
       storeId: store.id,
-      url: form.url.trim().replace(/\/$/, ''),
-      consumerKey: form.consumerKey.trim(),
-      consumerSecret: form.consumerSecret.trim(),
     });
     setTest({ state: result.ok ? 'ok' : 'fail', message: result.message });
   };
@@ -100,23 +94,15 @@ export default function IntegrationModal({ store, onClose }) {
       saveStore({ ...base, url: store.url || '', region, keyHint: 'Not connected' }, isNew, form.clientId);
     } else {
       // Keys are stored in the admin-only PocketBase collection; only the last 4 characters are shown here.
-      const secret = isShopify ? form.token : form.consumerKey.trim();
-      const credentials = !secret
-        ? undefined
-        : isShopify
-          ? { token: secret }
-          : { consumerKey: secret, consumerSecret: form.consumerSecret.trim() };
       const { accountId: _a, region: _r, ...rest } = base;
       saveStore(
         {
           ...rest,
           url: form.url.trim().replace(/\/$/, ''),
-          keyHint: secret ? `${isShopify ? 'shpat_' : 'ck_'}••••${secret.slice(-4)}` : store.keyHint,
-          credentialsChanged: !!secret,
+            keyHint: form.platform === 'WooCommerce' ? 'Netlify environment' : 'Not connected',
         },
         isNew,
         form.clientId,
-        credentials,
       );
     }
     onClose();
@@ -142,7 +128,8 @@ export default function IntegrationModal({ store, onClose }) {
     >
       <form id="integration-form" onSubmit={submit} className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Platform" hint={usesOAuth ? 'Connects with the seller’s login (OAuth).' : 'Connects with API keys from the store admin.'}>
+          <Field label="Platform" hint={usesOAuth ? 'Connects with the seller’s login (OAuth).' : 'Credentials are configured server-side in Netlify.'}>
+              // Only non-secret store metadata is saved by the browser.
             <Select value={form.platform} onChange={changePlatform} options={PLATFORM_NAMES.map((p) => ({ value: p, label: p }))} />
           </Field>
           <Field label="Store name" error={errors.name}>
@@ -169,7 +156,6 @@ export default function IntegrationModal({ store, onClose }) {
           {usesOAuth ? (
             <Callout icon={TriangleAlert} tone="warning">
               Signing in with {form.platform} isn't available yet, so this store won't sync. You can still save it to organize clients and groups.
-              Live sync works for WooCommerce today.
             </Callout>
           ) : (
             <div className="space-y-4">
@@ -181,50 +167,12 @@ export default function IntegrationModal({ store, onClose }) {
                   placeholder={isShopify ? 'your-store.myshopify.com' : 'https://your-store.com'}
                 />
               </Field>
-              {!needsCredentials && (
-                <p className={`text-xs ${ui.muted}`}>
-                  Current key: <span className="font-mono">{store.keyHint}</span>. Leave empty to keep it.
-                </p>
-              )}
-              {isShopify ? (
-                <Field
-                  label="Admin API access token"
-                  error={errors.token}
-                  hint="Shopify admin → Settings → Apps → Develop apps. Needs read/write products and orders."
-                >
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    className={`${ui.input} font-mono`}
-                    value={form.token}
-                    onChange={bind('token')}
-                    placeholder="shpat_…"
-                  />
-                </Field>
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Consumer key" error={errors.consumerKey}>
-                    <input
-                      type="password"
-                      autoComplete="off"
-                      className={`${ui.input} font-mono`}
-                      value={form.consumerKey}
-                      onChange={bind('consumerKey')}
-                      placeholder="ck_…"
-                    />
-                  </Field>
-                  <Field label="Consumer secret" error={errors.consumerSecret}>
-                    <input
-                      type="password"
-                      autoComplete="off"
-                      className={`${ui.input} font-mono`}
-                      value={form.consumerSecret}
-                      onChange={bind('consumerSecret')}
-                      placeholder="cs_…"
-                    />
-                  </Field>
-                  <p className={`text-xs sm:col-span-2 ${ui.muted}`}>WooCommerce → Settings → Advanced → REST API. Choose Read/Write permission.</p>
-                </div>
+              {form.platform === 'WooCommerce' && (
+                <Callout tone="info">
+                  WooCommerce credentials are configured only in Netlify, never in this browser. {store.id
+                    ? `Store ID: ${store.id}. Add WC_STORE_${storeEnvSuffix}_CONSUMER_KEY, WC_STORE_${storeEnvSuffix}_CONSUMER_SECRET, and WC_STORE_${storeEnvSuffix}_WEBHOOK_SECRET in Netlify.`
+                    : 'Save the store first to generate its Store ID and environment variable names.'}
+                </Callout>
               )}
             </div>
           )}

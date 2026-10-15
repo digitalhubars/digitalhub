@@ -1,7 +1,7 @@
 import { Clock, RefreshCw } from 'lucide-react';
 import { Badge } from '../../components/ui/Badge';
 import { useApp } from '../../context/AppContext';
-import { timeAgo } from '../../lib/format';
+import { formatLastSync } from '../../lib/format';
 import { ui } from '../../styles/ui';
 
 // Connection status per store. `compact` hides the "Sync now" button (client view).
@@ -17,7 +17,7 @@ export default function StoreHealthList({ stores, compact }) {
           <div className="min-w-0 flex-1">
             <p className={`truncate text-sm font-medium ${ui.h}`}>{store.name}</p>
             <p className={`mt-0.5 flex items-center gap-1 text-xs ${ui.muted}`}>
-              <Clock size={12} /> Last sync {timeAgo(store.lastSync)}
+              <Clock size={12} /> Last sync {formatLastSync(store.lastSync)}
             </p>
           </div>
           <Badge status={store.status === 'paused' ? 'paused' : syncingStores[store.id] ? 'checking' : store.health} />

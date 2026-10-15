@@ -52,10 +52,27 @@ The static app exports `/`, `/signin`, `/signup`, `/forgot-password`, and these 
 
 The app uses the PocketBase collections `users`, `role_access`, `workspace`, `groups`, `clients`, `stores`, `products`, `orders`, `customers`, `activity`, `notifications`, and `storeSecrets`.
 
+## WooCommerce Netlify Functions
+
+The Sync button sends `POST /.netlify/functions/digital-hub` with an action, store ID, and the signed-in user's PocketBase token. It no longer calls a nonexistent PocketBase `/api/digital-hub/...` route. This works with the static export (`output: 'export'`) because the server logic runs in Netlify Functions, not Next.js route handlers. Netlify also deploys `woocommerce-webhook` and `woo-scheduled-sync`, scheduled every 15 minutes. Set these in **Netlify → Site configuration → Environment variables** (server-side only; do not prefix them with `NEXT_PUBLIC_`):
+
+| Variable | Purpose |
+| --- | --- |
+| `PB_URL` | PocketBase base URL, e.g. `https://pocketbase-railway-production-b1cb.up.railway.app` |
+| `PB_SERVICE_EMAIL` | Dedicated active PocketBase Auth user with role `admin` |
+| `PB_SERVICE_PASSWORD` | Password for that service user |
+| `WC_STORE_<STORE_SUFFIX>_CONSUMER_KEY` | WooCommerce REST API consumer key for one store |
+| `WC_STORE_<STORE_SUFFIX>_CONSUMER_SECRET` | WooCommerce REST API consumer secret for one store |
+| `WC_STORE_<STORE_SUFFIX>_WEBHOOK_SECRET` | HMAC secret configured on each WooCommerce webhook for that store |
+
+`STORE_SUFFIX` is the store's record key uppercased with every non-alphanumeric character replaced by `_`. The Integrations editor shows the required variable names after the store is saved. The public browser variable `NEXT_PUBLIC_PB_URL` is still required for direct PocketBase reads; it is not used for any server credential.
+
+In WooCommerce, create webhooks for product, order, and customer created/updated/deleted topics. Use the URL shown under Settings → Webhooks and set the webhook secret to the value of that store's `WC_STORE_<STORE_SUFFIX>_WEBHOOK_SECRET`. Redeploy/rebuild Netlify after changing environment variables. The secret itself is never entered into or stored by the browser.
+
 ## Notes
 
 - The previous backend and config values were removed.
 - The app is now running against PocketBase for auth and the shared CRM datastore.
 - Configure the PocketBase collections and API rules described in the deployment setup before inviting users.
 - The static export is written to `out`; configure Netlify to publish that directory and set `NEXT_PUBLIC_PB_URL` for the build.
-- WooCommerce sync requires custom PocketBase server routes at `/api/digital-hub/{action}`.
+- WooCommerce credentials are read only by Netlify Functions from server-side environment variables; configure webhook topics as described above.

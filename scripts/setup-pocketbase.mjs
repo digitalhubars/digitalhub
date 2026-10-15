@@ -99,7 +99,7 @@ const collectionSpecs = [
       text('recordKey', { required: true, unique: true }), text('name'), select('platform', ['Shopify', 'WooCommerce', 'Amazon', 'eBay', 'TikTok Shop']),
       text('url'), text('groupId'), select('status', ['active', 'paused']),
       select('health', ['checking', 'connected', 'slow', 'error', 'expiring', 'manual']),
-      number('lastSync'), text('keyHint'), text('accountId'), text('region'), text('syncFrequency'), text('webhooks'),
+      number('lastSync'), text('lastError'), text('keyHint'), text('accountId'), text('region'), text('syncFrequency'), text('webhooks'),
       number('createdAt'), bool('sample'),
     ], rules: { listRule: loggedIn, viewRule: loggedIn, createRule: adminOrManager, updateRule: adminOrManager, deleteRule: admin },
   },

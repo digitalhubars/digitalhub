@@ -9,7 +9,7 @@ import PageHeader from '../../components/ui/PageHeader';
 import Select from '../../components/ui/Select';
 import { useApp } from '../../context/AppContext';
 import { isOAuthPlatform, PLATFORM_NAMES } from '../../data/platforms';
-import { timeAgo } from '../../lib/format';
+import { formatLastSync } from '../../lib/format';
 import { ui } from '../../styles/ui';
 import { storeAddress } from '../clients/StorePicker';
 import IntegrationModal from './IntegrationModal';
@@ -113,7 +113,7 @@ export default function IntegrationsPage() {
                 );
               },
             },
-            { key: 'sync', label: 'Last sync', render: (s) => <span className="whitespace-nowrap">{timeAgo(s.lastSync)}</span> },
+            { key: 'sync', label: 'Last sync', render: (s) => <span className="whitespace-nowrap">{formatLastSync(s.lastSync)}</span> },
             {
               key: 'status',
               label: 'Status',

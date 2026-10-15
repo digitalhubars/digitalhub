@@ -55,5 +55,20 @@ export async function deleteRecord(collectionName, externalId) {
 }
 
 export async function call(action, payload = {}) {
-  return pb.send(`/api/digital-hub/${encodeURIComponent(action)}`, { method: 'POST', body: payload });
+  const response = await fetch('/.netlify/functions/digital-hub', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${pb.authStore.token}`,
+    },
+    body: JSON.stringify({ action, payload }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(result.message || `Server action failed with status ${response.status}.`);
+    error.status = response.status;
+    error.response = result;
+    throw error;
+  }
+  return result;
 }

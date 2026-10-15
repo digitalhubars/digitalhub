@@ -53,8 +53,17 @@ The current schema stores group/client/store assignments as text IDs and JSON ar
 
 After running setup, assign the first account `admin` in PocketBase Admin UI. Use the admin Role Access page to assign roles and configure `role_access` rows. Staff can only view pages whose `canView` is enabled; manager deletion and staff edits/deletes are prohibited by both the app and setup rules.
 
-## Netlify
+## Netlify and WooCommerce
 
 Set build command `npm run build`, publish directory `out`, and `NEXT_PUBLIC_PB_URL` in Netlify's build environment. This is a Next.js static export; PocketBase is called from the browser. Rebuild after changing the variable because `NEXT_PUBLIC_*` values are embedded at build time.
 
-WooCommerce connection, test, sync, and disconnect actions also call `/api/digital-hub/{action}`. This repository contains no PocketBase extension or server route for those actions; deploy that backend separately before enabling live store sync.
+Add these **server-side** Netlify variables; do not use the `NEXT_PUBLIC_` prefix:
+
+- `PB_URL`: PocketBase base URL.
+- `PB_SERVICE_EMAIL` and `PB_SERVICE_PASSWORD`: a dedicated active Auth user whose `role` is `admin`.
+- `WC_STORE_<STORE_SUFFIX>_CONSUMER_KEY` and `WC_STORE_<STORE_SUFFIX>_CONSUMER_SECRET`: WooCommerce REST Read/Write keys per store.
+- `WC_STORE_<STORE_SUFFIX>_WEBHOOK_SECRET`: random webhook secret per store.
+
+`STORE_SUFFIX` is the saved store record key uppercased with non-alphanumeric characters replaced by underscores. The Integrations editor displays the variable names once a store has been saved. The browser calls `/.netlify/functions/digital-hub`; the other deployed functions are `/.netlify/functions/woocommerce-webhook` and `woo-scheduled-sync` (every 15 minutes).
+
+In WooCommerce, create product, order, and customer create/update/delete webhooks pointed to the URL displayed under Settings → Webhooks. Set each webhook's secret to the matching `WC_STORE_<STORE_SUFFIX>_WEBHOOK_SECRET` value. The receiver validates `X-WC-Webhook-Signature` with HMAC-SHA256 before writing to PocketBase. Netlify environment changes require a new deploy.

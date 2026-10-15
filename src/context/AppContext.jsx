@@ -396,7 +396,7 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
     }
   };
 
-  // form: { platform, url, consumerKey, consumerSecret, storeId? }
+  // Store credentials are server-side Netlify environment variables, never browser form data.
   const testConnection = async (form) => {
     if (form.platform !== 'WooCommerce') {
       return { ok: false, message: `Live connection for ${form.platform} isn’t available yet. Only WooCommerce connects for now.` };
@@ -404,9 +404,6 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
     try {
       return await call('testWooConnection', {
         storeId: form.storeId,
-        url: form.url,
-        consumerKey: form.consumerKey || undefined,
-        consumerSecret: form.consumerSecret || undefined,
       });
     } catch (err) {
       return { ok: false, message: callError(err) };
@@ -434,11 +431,10 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
   };
 
   /**
-   * store: the store fields; credentials: { consumerKey, consumerSecret } when new keys were typed.
-  * Keys go to the admin-only storeSecrets collection; the UI only displays the masked key hint.
+  * WooCommerce credentials are configured in Netlify and indexed by the generated recordKey.
    */
-  const saveStore = async (store, isNew, clientId, credentials) => {
-    const { credentialsChanged: _c, ...data } = store;
+  const saveStore = async (store, isNew, clientId) => {
+    const data = store;
     const id = isNew ? uid('st') : data.id;
     const previous = storeOf(id);
     const isWoo = data.platform === 'WooCommerce';
@@ -447,23 +443,20 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
       ...previous,
       ...data,
       id,
-      health: isWoo ? (isNew || credentials || urlChanged ? 'checking' : previous?.health || 'checking') : 'manual',
+      health: isWoo ? (isNew || urlChanged ? 'checking' : previous?.health || 'checking') : 'manual',
       lastSync: previous?.lastSync || null,
       createdAt: previous?.createdAt || Date.now(),
     };
 
     try {
       await setStores((list) => (isNew ? [...list, record] : list.map((s) => (s.id === id ? record : s))));
-      if (isWoo && (credentials || urlChanged || isNew)) {
-        await saveRecord('storeSecrets', id, { url: record.url, ...(credentials || {}), updatedAt: Date.now() });
-      }
       if (clientId) await setClients((list) => list.map((c) => (c.id === clientId ? { ...c, storeIds: [...(c.storeIds || []), id] } : c)));
     } catch {
       return;
     }
 
     log(`${isNew ? 'Connected' : 'Updated'} ${record.platform} store ${record.name}`, 'integration');
-    if (isWoo && (isNew || credentials || urlChanged) && record.status === 'active') {
+    if (isWoo && (isNew || urlChanged) && record.status === 'active') {
       resyncStore(record);
     } else {
       showToast({

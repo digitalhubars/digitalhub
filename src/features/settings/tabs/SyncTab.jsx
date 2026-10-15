@@ -3,7 +3,7 @@ import { Badge, StoreBadge } from '../../../components/ui/Badge';
 import Button from '../../../components/ui/Button';
 import { Card } from '../../../components/ui/Card';
 import { useApp } from '../../../context/AppContext';
-import { timeAgo } from '../../../lib/format';
+import { formatLastSync } from '../../../lib/format';
 import { ui } from '../../../styles/ui';
 
 const RULES = [
@@ -50,7 +50,7 @@ export default function SyncTab() {
               <div className="min-w-0 flex-1">
                 <p className={`truncate text-sm font-medium ${ui.h}`}>{s.name}</p>
                 <p className={`text-xs ${ui.muted}`}>
-                  Last sync {s.lastSync ? timeAgo(s.lastSync) : 'never'}
+                  Last sync {formatLastSync(s.lastSync)}
                   {s.counts ? ` · ${s.counts.products} products, ${s.counts.orders} orders` : ''}
                 </p>
                 {s.lastError && <p className="mt-0.5 text-xs text-red-700 dark:text-red-400">{s.lastError}</p>}
