@@ -5,8 +5,8 @@ import { useApp } from '../../../context/AppContext';
 import { ui } from '../../../styles/ui';
 import CopyField from '../CopyField';
 
-const project = 'your-project';
-const webhookUrl = (storeId) => `https://asia-southeast1-${project}.cloudfunctions.net/wooWebhook?store=${storeId}`;
+const pocketBaseUrl = process.env.NEXT_PUBLIC_PB_URL?.replace(/\/$/, '') || '';
+const webhookUrl = (storeId) => `${pocketBaseUrl}/api/digital-hub/wooWebhook?store=${encodeURIComponent(storeId)}`;
 
 // WooCommerce webhooks are created automatically when a store first syncs.
 export default function ApiTab() {

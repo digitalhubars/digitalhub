@@ -1,4 +1,4 @@
-// Backup file for the workspace data (download only; the live data is in Firestore).
+// Backup file for the workspace data (download only; live records are in PocketBase).
 
 const VERSION = 2;
 

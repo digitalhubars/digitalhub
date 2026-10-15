@@ -1,0 +1,11 @@
+{
+  "files.associations": {
+    "**/out/**/*.html": "html"
+  },
+  "files.exclude": {
+    "**/out": true
+  },
+  "search.exclude": {
+    "**/out/**": true
+  }
+}

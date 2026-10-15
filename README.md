@@ -10,7 +10,7 @@ Next.js 14 + Tailwind front end using PocketBase for auth and data.
    ```
 2. Start PocketBase on port 8090 and set the app URL in `.env.local`:
    ```bash
-   NEXT_PUBLIC_POCKETBASE_URL=http://127.0.0.1:8090
+   NEXT_PUBLIC_PB_URL=http://127.0.0.1:8090
    ```
 3. Start the app:
    ```bash
@@ -29,4 +29,6 @@ npm run build
 
 - The previous backend and config values were removed.
 - The app is now running against PocketBase for auth and the shared CRM datastore.
-- WooCommerce sync features should be connected through the PocketBase backend once the relevant collections and server logic are set up.
+- Configure the PocketBase collections and API rules described in the deployment setup before inviting users.
+- The static export is written to `out`; configure Netlify to publish that directory and set `NEXT_PUBLIC_PB_URL` for the build.
+- WooCommerce sync requires custom PocketBase server routes at `/api/digital-hub/{action}`.

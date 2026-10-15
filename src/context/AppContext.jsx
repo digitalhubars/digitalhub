@@ -1,10 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { collection, doc, limit, orderBy, query, setDoc, where } from '../lib/pocketbase';
+import { call, pb, saveRecord } from '../lib/pocketbase';
 import { defaultSettings, isOAuthPlatform, PLATFORMS, sessions as initialSessions } from '../data';
 import { canVisitPage, routePath, settingsTabsFor } from '../config/navigation';
 import { getAccess } from '../config/roles';
 import { signOut as appSignOut, updateOwnProfile, authMessage } from '../lib/auth';
-import { call, fb } from '../lib/pocketbase';
 import { useLiveDoc, useLiveList, waitForSync } from '../lib/live';
 import { diffFields, formatMoney, uid } from '../lib/format';
 import { removeStoreData } from '../lib/removeStoreData';
@@ -23,15 +22,11 @@ const withoutKey = (obj, key) => {
 
 const byNewest = (field) => (a, b) => (b[field] || 0) - (a[field] || 0);
 
-// Cloud Functions errors in plain words. "not-found"/"internal" usually mean the sync
-// functions aren’t deployed yet; the sync layer can be enabled when the backend is ready.
 const callError = (err) =>
-  ['functions/not-found', 'functions/internal', 'functions/unavailable'].includes(err?.code)
-    ? 'Live WooCommerce sync isn’t switched on yet. Enable the sync layer in PocketBase, then the sync functions can be deployed.'
-    : err?.message || 'Something went wrong.';
+  err?.response?.message || err?.message || 'The PocketBase sync endpoint is unavailable.';
 
 /**
- * profile:  the signed-in user's Firestore doc users/{uid} (role, group_id, client_id…)
+ * profile: the signed-in user's PocketBase users record (role, group_id, client_id…)
  * route:    { env, page, tab } parsed from the URL; `env` is the dashboard being viewed
  * navigate: (path, { replace }) => void
  */
@@ -69,18 +64,20 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
     return () => clearTimeout(timer);
   }, [toast]);
 
-  // ---- Live data from Firestore ---------------------------------------------
-  // Admins load everything. Managers load their group's stores, clients their client's
-  // stores; firestore.rules enforce the same limits on the server.
-  const { db } = fb();
+  // ---- Live data from PocketBase ---------------------------------------------
+  // Collection API rules must enforce these role-based scopes on the server.
   const myGroup = profile.group_id;
   const myClient = profile.client_id;
   const live = { onError: reportWriteError };
 
-  const [groups, setGroups] = useLiveList('groups', [{ key: 'all', ref: collection(db, 'groups') }], { ...live, merge: true });
+  const [groups, setGroups] = useLiveList('groups', [{ key: 'all', collection: 'groups' }], live);
   const [clients, setClients] = useLiveList(
     'clients',
-    isAdmin ? [{ key: 'all', ref: collection(db, 'clients') }] : realRole === 'client' && myClient ? [{ key: myClient, ref: doc(db, 'clients', myClient) }] : [],
+    isAdmin
+      ? [{ key: 'all', collection: 'clients' }]
+      : realRole === 'client' && myClient
+        ? [{ key: myClient, collection: 'clients', filter: pb.filter('recordKey = {:id}', { id: myClient }) }]
+        : [],
     live,
   );
 
@@ -92,14 +89,14 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
 
   const perStore = (name) =>
     isAdmin
-      ? [{ key: 'all', ref: collection(db, name) }]
-      : (visibleStoreIds || []).map((id) => ({ key: id, ref: query(collection(db, name), where('storeId', '==', id)) }));
+      ? [{ key: 'all', collection: name }]
+      : (visibleStoreIds || []).map((id) => ({ key: id, collection: name, filter: pb.filter('storeId = {:id}', { id }) }));
 
   const storeSources = isAdmin
-    ? [{ key: 'all', ref: collection(db, 'stores') }]
+    ? [{ key: 'all', collection: 'stores' }]
     : realRole === 'manager' && myGroup
-      ? [{ key: `g:${myGroup}`, ref: query(collection(db, 'stores'), where('groupId', '==', myGroup)) }]
-      : (visibleStoreIds || []).map((id) => ({ key: id, ref: doc(db, 'stores', id) }));
+      ? [{ key: `g:${myGroup}`, collection: 'stores', filter: pb.filter('groupId = {:id}', { id: myGroup }) }]
+      : (visibleStoreIds || []).map((id) => ({ key: id, collection: 'stores', filter: pb.filter('recordKey = {:id}', { id }) }));
 
   const [stores, setStores] = useLiveList('stores', storeSources, live);
   const [products, setProducts] = useLiveList('products', perStore('products'), {
@@ -110,15 +107,15 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
   });
   const [orders, setOrders] = useLiveList('orders', perStore('orders'), { ...live, sort: byNewest('placedAt') });
   const [customerRecords] = useLiveList('customers', perStore('customers'), live);
-  const [users] = useLiveList('users', isAdmin ? [{ key: 'all', ref: collection(db, 'users') }] : [], live);
+  const [users] = useLiveList('users', isAdmin ? [{ key: 'all', collection: 'users' }] : [], live);
   const [activity, setActivity] = useLiveList(
     'activity',
-    isAdmin ? [{ key: 'recent', ref: query(collection(db, 'activity'), orderBy('at', 'desc'), limit(300)) }] : [],
+    isAdmin ? [{ key: 'recent', collection: 'activity', sort: '-at' }] : [],
     { ...live, sort: byNewest('at') },
   );
   const [notifications, setNotifications] = useLiveList(
     'notifications',
-    isAdmin ? [{ key: 'recent', ref: query(collection(db, 'notifications'), orderBy('at', 'desc'), limit(50)) }] : [],
+    isAdmin ? [{ key: 'recent', collection: 'notifications', sort: '-at' }] : [],
     { ...live, sort: byNewest('at') },
   );
   const [settingsDoc, updateSettingsDoc] = useLiveDoc('workspace/settings', live);
@@ -288,7 +285,7 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
     setActivity((list) => [{ id: uid('a'), at: Date.now(), actor: currentUser.name, actorId: profile.id, type, text }, ...list]).catch(() => {});
 
   const notify = (text, tone = 'success') =>
-    setDoc(doc(db, 'notifications', uid('n')), { at: Date.now(), text, tone, read: false }).catch(() => {});
+    saveRecord('notifications', uid('n'), { at: Date.now(), text, tone, read: false }).catch(() => {});
 
   const markAllRead = () => setNotifications((list) => list.map((n) => ({ ...n, read: true }))).catch(() => {});
 
@@ -428,7 +425,7 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
 
   /**
    * store: the store fields; credentials: { consumerKey, consumerSecret } when new keys were typed.
-   * Keys go to storeSecrets/{id}, which the browser can write but never read back.
+  * Keys go to the admin-only storeSecrets collection; the UI only displays the masked key hint.
    */
   const saveStore = async (store, isNew, clientId, credentials) => {
     const { credentialsChanged: _c, ...data } = store;
@@ -448,7 +445,7 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
     try {
       await setStores((list) => (isNew ? [...list, record] : list.map((s) => (s.id === id ? record : s))));
       if (isWoo && (credentials || urlChanged || isNew)) {
-        await setDoc(doc(db, 'storeSecrets', id), { url: record.url, ...(credentials || {}), updatedAt: Date.now() }, { merge: true });
+        await saveRecord('storeSecrets', id, { url: record.url, ...(credentials || {}), updatedAt: Date.now() });
       }
       if (clientId) await setClients((list) => list.map((c) => (c.id === clientId ? { ...c, storeIds: [...(c.storeIds || []), id] } : c)));
     } catch {
@@ -481,7 +478,7 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
       try {
         await call('disconnectStore', { storeId: store.id });
       } catch (err) {
-        if (!['functions/not-found', 'functions/internal', 'functions/unavailable'].includes(err?.code)) throw err;
+        if (err?.status !== 404 && !['functions/not-found', 'functions/internal', 'functions/unavailable'].includes(err?.code)) throw err;
         await removeStoreData(store.id); // sync functions not deployed: remove Digital Hub's copy directly
       }
       log(`Deleted integration ${store.name}`, 'integration');

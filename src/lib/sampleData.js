@@ -1,36 +1,29 @@
-import { doc, writeBatch } from './pocketbase';
 import { clients, customers, groups, orders, products, stores } from '../data';
-import { fb } from './pocketbase';
+import { deleteRecord, saveRecord } from './pocketbase';
 
-// The demo stores (marked `sample: true`) so the dashboards have something to show.
-// The sync functions never contact a real store for them.
+const toRecord = ({ id: _id, ...record }) => JSON.parse(JSON.stringify(record));
 
-const toDoc = ({ id: _id, ...rest }) => JSON.parse(JSON.stringify(rest));
-
-function sampleDocs() {
-  const docs = [];
-  stores.forEach((s) => docs.push(['stores', s.id, { ...s, sample: true }]));
-  groups.forEach((g) => docs.push(['groups', g.id, { ...g, sample: true, storeIds: stores.filter((s) => s.groupId === g.id).map((s) => s.id) }]));
-  products.forEach((p) => docs.push(['products', p.id, { ...p, syncState: 'synced' }]));
-  orders.forEach((o) => docs.push(['orders', o.id, { ...o, syncState: 'synced' }]));
-  customers.forEach((c) => docs.push(['customers', c.id, c]));
-  clients.forEach((c) => docs.push(['clients', c.id, { ...c, sample: true }]));
-  return docs;
+function sampleRecords() {
+  const records = [];
+  stores.forEach((store) => records.push(['stores', store.id, { ...store, sample: true }]));
+  groups.forEach((group) => records.push(['groups', group.id, {
+    ...group,
+    sample: true,
+    storeIds: stores.filter((store) => store.groupId === group.id).map((store) => store.id),
+  }]));
+  products.forEach((product) => records.push(['products', product.id, { ...product, syncState: 'synced' }]));
+  orders.forEach((order) => records.push(['orders', order.id, { ...order, syncState: 'synced' }]));
+  customers.forEach((customer) => records.push(['customers', customer.id, customer]));
+  clients.forEach((client) => records.push(['clients', client.id, { ...client, sample: true }]));
+  return records;
 }
 
-async function commit(ops) {
-  const { db } = fb();
-  for (let i = 0; i < ops.length; i += 450) {
-    const batch = writeBatch(db);
-    ops.slice(i, i + 450).forEach(([collection, id, data]) => {
-      const ref = doc(db, collection, id);
-      if (data) batch.set(ref, toDoc(data));
-      else batch.delete(ref);
-    });
-    await batch.commit();
+async function commit(records) {
+  for (const [collectionName, externalId, data] of records) {
+    if (data) await saveRecord(collectionName, externalId, toRecord(data));
+    else await deleteRecord(collectionName, externalId);
   }
 }
 
-export const loadSampleData = () => commit(sampleDocs());
-
-export const removeSampleData = () => commit(sampleDocs().map(([collection, id]) => [collection, id, null]));
+export const loadSampleData = () => commit(sampleRecords());
+export const removeSampleData = () => commit(sampleRecords().map(([collectionName, id]) => [collectionName, id, null]));

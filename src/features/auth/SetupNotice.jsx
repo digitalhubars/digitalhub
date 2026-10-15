@@ -12,7 +12,7 @@ export default function SetupNotice() {
         The PocketBase server is not configured yet.
       </Callout>
       <p className={ui.body}>
-        Add <Code>NEXT_PUBLIC_POCKETBASE_URL</Code> to <Code>.env.local</Code>, then restart the server and start PocketBase on port 8090.
+        Set <Code>NEXT_PUBLIC_PB_URL</Code> in the deployment environment, then rebuild the app.
       </p>
     </div>
   );

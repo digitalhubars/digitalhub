@@ -1,50 +1,35 @@
-import { deleteDoc, doc } from './pocketbase';
-import { fb } from './pocketbase';
+import { pb } from './pocketbase';
 
 export async function adminCreateUser({ email, password, fullName, role, groupId, clientId }) {
-  const users = JSON.parse(localStorage.getItem('digital-hub-users') || '{}');
-  const id = `u_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
-  const profile = {
-    id,
+  const profile = await pb.collection('users').create({
     email: email.trim(),
     password,
-    fullName: fullName.trim(),
+    passwordConfirm: password,
+    full_name: fullName.trim(),
+    phone: '',
     role,
-    group_id: role === 'manager' ? groupId || null : null,
-    client_id: role === 'client' ? clientId || null : null,
+    group_id: role === 'manager' ? groupId || '' : '',
+    client_id: role === 'client' ? clientId || '' : '',
     status: 'active',
     created_at: new Date().toISOString(),
-  };
-  users[id] = profile;
-  localStorage.setItem('digital-hub-users', JSON.stringify(users));
-  return { uid: id, profile };
+  });
+  return { uid: profile.id, profile };
 }
 
 export async function adminUpdateUser(account, { role, groupId, clientId, status }, allUsers) {
   const next = {
     role,
     status: status === 'suspended' ? 'suspended' : 'active',
-    group_id: role === 'manager' ? groupId || null : null,
-    client_id: role === 'client' ? clientId || null : null,
+    group_id: role === 'manager' ? groupId || '' : '',
+    client_id: role === 'client' ? clientId || '' : '',
   };
   const losingAdmin = account.role === 'admin' && account.status === 'active' && (next.role !== 'admin' || next.status !== 'active');
-  if (losingAdmin && !allUsers.some((u) => u.id !== account.id && u.role === 'admin' && u.status === 'active')) {
+  if (losingAdmin && !allUsers.some((user) => user.id !== account.id && user.role === 'admin' && user.status === 'active')) {
     throw new Error('At least one active admin must remain.');
   }
-  const profiles = JSON.parse(localStorage.getItem('digital-hub-profiles') || '{}');
-  profiles[account.id] = { ...(profiles[account.id] || {}), ...next };
-  localStorage.setItem('digital-hub-profiles', JSON.stringify(profiles));
-  return { ...account, ...next };
+  return pb.collection('users').update(account.id, next);
 }
 
-export const adminSendPasswordReset = () => Promise.resolve();
+export const adminSendPasswordReset = (email) => pb.collection('users').requestPasswordReset(email.trim());
 
-export const adminDeleteUser = async (uid) => {
-  const users = JSON.parse(localStorage.getItem('digital-hub-users') || '{}');
-  delete users[uid];
-  localStorage.setItem('digital-hub-users', JSON.stringify(users));
-  const profiles = JSON.parse(localStorage.getItem('digital-hub-profiles') || '{}');
-  delete profiles[uid];
-  localStorage.setItem('digital-hub-profiles', JSON.stringify(profiles));
-  await deleteDoc(doc(fb().db, 'users', uid)).catch(() => {});
-};
+export const adminDeleteUser = (id) => pb.collection('users').delete(id);

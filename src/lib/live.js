@@ -1,156 +1,200 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { doc, fb, onSnapshot, setDoc, writeBatch } from './pocketbase';
+import { deleteRecord, findRecord, normalizeRecord, pb, saveRecord } from './pocketbase';
 
 export function stableStringify(value) {
-	if (value === null || typeof value !== 'object') return JSON.stringify(value ?? null);
-	if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-	return `{${Object.keys(value)
-		.filter((k) => value[k] !== undefined)
-		.sort()
-		.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`)
-		.join(',')}}`;
+  if (value === null || typeof value !== 'object') return JSON.stringify(value ?? null);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  return `{${Object.keys(value)
+    .filter((key) => value[key] !== undefined && key !== '_pbId')
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+    .join(',')}}`;
 }
 
-const toDoc = ({ id: _id, ...rest }) => JSON.parse(JSON.stringify(rest));
-
-export async function writeDiff(name, prev, next, { softDelete, merge } = {}) {
-	const { db } = fb();
-	const before = new Map(prev.map((d) => [d.id, d]));
-	const ops = [];
-	next.forEach((item) => {
-		const old = before.get(item.id);
-		if (!old || stableStringify(old) !== stableStringify(item)) ops.push(['set', item]);
-		before.delete(item.id);
-	});
-	before.forEach((item) => ops.push([softDelete ? 'soft' : 'delete', item]));
-
-	for (let i = 0; i < ops.length; i += 450) {
-		const batch = writeBatch(db);
-		ops.slice(i, i + 450).forEach(([op, item]) => {
-			const ref = doc(db, name, item.id);
-			if (op === 'set') batch.set(ref, toDoc(item), merge ? { merge: true } : {});
-			else if (op === 'soft') batch.set(ref, { ...toDoc(item), ...softDelete(item) });
-			else batch.delete(ref);
-		});
-		await batch.commit();
-	}
-	return ops.length;
+async function fetchSource(source) {
+  const collection = pb.collection(source.collection);
+  if (source.recordId) return [normalizeRecord(await collection.getOne(source.recordId))];
+  const records = await collection.getFullList({ filter: source.filter, sort: source.sort });
+  return records.map(normalizeRecord);
 }
 
-export function useLiveList(name, sources, { sort, softDelete, merge, onError } = {}) {
-	const [list, setListState] = useState([]);
-	const [loading, setLoading] = useState(true);
-	const listRef = useRef([]);
-	const optionsRef = useRef({ sort, softDelete, merge, onError });
-	optionsRef.current = { sort, softDelete, merge, onError };
+export async function writeDiff(collectionName, previous, next, { softDelete } = {}) {
+  const before = new Map(previous.map((record) => [record.id, record]));
+  const operations = [];
+  next.forEach((record) => {
+    const oldRecord = before.get(record.id);
+    if (!oldRecord || stableStringify(oldRecord) !== stableStringify(record)) operations.push(['save', record]);
+    before.delete(record.id);
+  });
+  before.forEach((record) => operations.push([softDelete ? 'soft-delete' : 'delete', record]));
 
-	const key = sources ? sources.map((s) => s.key).join('|') : 'off';
+  for (const [operation, record] of operations) {
+    const collection = pb.collection(collectionName);
+    const { id, _pbId, ...payload } = record;
+    if (operation === 'delete') {
+      if (_pbId) await collection.delete(_pbId);
+      else await deleteRecord(collectionName, id);
+    } else if (operation === 'soft-delete') {
+      const patch = { ...payload, ...softDelete(record) };
+      if (_pbId) await collection.update(_pbId, patch);
+      else await saveRecord(collectionName, id, patch);
+    } else if (_pbId) {
+      await collection.update(_pbId, payload);
+    } else {
+      await saveRecord(collectionName, id, payload);
+    }
+  }
+  return operations.length;
+}
 
-	useEffect(() => {
-		if (!sources || !sources.length) {
-			listRef.current = [];
-			setListState([]);
-			setLoading(false);
-			return undefined;
-		}
-		setLoading(true);
-		const parts = new Map();
-		const emit = () => {
-			const merged = new Map();
-			parts.forEach((m) => m.forEach((v, k) => merged.set(k, v)));
-			let arr = [...merged.values()].filter((d) => !d.pendingDelete);
-			if (optionsRef.current.sort) arr = arr.sort(optionsRef.current.sort);
-			listRef.current = arr;
-			setListState(arr);
-			if (parts.size === sources.length) setLoading(false);
-		};
-		const unsubs = sources.map(({ key: partKey, ref }) =>
-			onSnapshot(
-				ref,
-				(snap) => {
-					const m = new Map();
-					if (snap.docs) snap.docs.forEach((d) => m.set(d.id, { id: d.id, ...d.data() }));
-					else if (snap.exists()) m.set(snap.id, { id: snap.id, ...snap.data() });
-					parts.set(partKey, m);
-					emit();
-				},
-				(err) => {
-					console.warn(`[live] ${name}/${partKey}:`, err.code || err.message);
-					parts.set(partKey, new Map());
-					emit();
-				},
-			),
-		);
-		return () => unsubs.forEach((u) => u());
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [name, key]);
+export function useLiveList(collectionName, sources, { sort, softDelete, onError } = {}) {
+  const [list, setListState] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const listRef = useRef([]);
+  const optionsRef = useRef({ sort, softDelete, onError });
+  optionsRef.current = { sort, softDelete, onError };
 
-	const setList = useCallback(
-		(updater) => {
-			const prev = listRef.current;
-			const next = typeof updater === 'function' ? updater(prev) : updater;
-			listRef.current = next;
-			setListState(next);
-			const { softDelete: sd, merge: mg, onError: report } = optionsRef.current;
-			return writeDiff(name, prev, next, { softDelete: sd, merge: mg }).catch((err) => {
-				report?.(err, name);
-				throw err;
-			});
-		},
-		[name],
-	);
+  const key = sources?.map((source) => [source.key, source.collection, source.recordId, source.filter, source.sort].join(':')).join('|') || 'off';
 
-	return [list, setList, loading];
+  useEffect(() => {
+    let active = true;
+    const parts = new Map();
+    const unsubscribers = [];
+
+    if (!sources?.length) {
+      listRef.current = [];
+      setListState([]);
+      setLoading(false);
+      return undefined;
+    }
+
+    setLoading(true);
+    const emit = () => {
+      const merged = new Map();
+      parts.forEach((records) => records.forEach((record) => merged.set(record.id, record)));
+      let records = [...merged.values()].filter((record) => !record.pendingDelete);
+      if (optionsRef.current.sort) records = records.sort(optionsRef.current.sort);
+      listRef.current = records;
+      setListState(records);
+      if (parts.size === sources.length) setLoading(false);
+    };
+
+    const refresh = async (source) => {
+      try {
+        const records = await fetchSource(source);
+        if (!active) return;
+        parts.set(source.key, new Map(records.map((record) => [record.id, record])));
+      } catch (error) {
+        if (!active) return;
+        optionsRef.current.onError?.(error, collectionName);
+        parts.set(source.key, new Map());
+      }
+      emit();
+    };
+
+    sources.forEach((source) => {
+      pb.collection(source.collection).subscribe('*', () => refresh(source)).then((unsubscribe) => {
+        if (active) unsubscribers.push(unsubscribe);
+        else unsubscribe();
+      }).catch((error) => {
+        optionsRef.current.onError?.(error, collectionName);
+      });
+      refresh(source);
+    });
+
+    return () => {
+      active = false;
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+    // Sources are intentionally represented by a stable descriptor key.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collectionName, key]);
+
+  const setList = useCallback((updater) => {
+    const previous = listRef.current;
+    const next = typeof updater === 'function' ? updater(previous) : updater;
+    listRef.current = next;
+    setListState(next);
+    const { softDelete: markDeleted, onError: report } = optionsRef.current;
+    return writeDiff(collectionName, previous, next, { softDelete: markDeleted }).catch((error) => {
+      report?.(error, collectionName);
+      throw error;
+    });
+  }, [collectionName]);
+
+  return [list, setList, loading];
 }
 
 export function useLiveDoc(path, { onError } = {}) {
-	const [data, setData] = useState(null);
-	useEffect(() => {
-		if (!path) return undefined;
-		return onSnapshot(
-			doc(fb().db, path),
-			(snap) => setData(snap.exists() ? snap.data() : {}),
-			(err) => {
-				console.warn(`[live] ${path}:`, err.code || err.message);
-				setData({});
-			},
-		);
-	}, [path]);
+  const [data, setData] = useState(null);
+  const [collectionName, externalId] = path?.split('/') || [];
 
-	const update = useCallback(
-		async (patch) => {
-			setData((d) => ({ ...(d || {}), ...patch }));
-			return setDoc(doc(fb().db, path), JSON.parse(JSON.stringify(patch)), { merge: true }).catch((err) => {
-				onError?.(err, path);
-				throw err;
-			});
-		},
-		[path, onError],
-	);
+  useEffect(() => {
+    if (!collectionName || !externalId) return undefined;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const record = await findRecord(collectionName, externalId);
+        if (active) setData(normalizeRecord(record) || {});
+      } catch (error) {
+        onError?.(error, path);
+        if (active) setData({});
+      }
+    };
+    let unsubscribe;
+    pb.collection(collectionName).subscribe('*', refresh).then((stop) => {
+      if (active) unsubscribe = stop;
+      else stop();
+    }).catch((error) => onError?.(error, path));
+    refresh();
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, [collectionName, externalId, onError, path]);
 
-	return [data, update];
+  const update = useCallback(async (patch) => {
+    setData((current) => ({ ...(current || {}), ...patch }));
+    try {
+      const saved = await saveRecord(collectionName, externalId, patch);
+      setData(normalizeRecord(saved));
+      return saved;
+    } catch (error) {
+      onError?.(error, path);
+      throw error;
+    }
+  }, [collectionName, externalId, onError, path]);
+
+  return [data, update];
 }
 
-export function waitForSync(collection, id, timeoutMs = 90000) {
-	return new Promise((resolve) => {
-		let timer;
-		const unsub = onSnapshot(
-			doc(fb().db, collection, id),
-			(snap) => {
-				const data = snap.exists() ? snap.data() : null;
-				if (!data) {
-					finish({ state: 'gone' });
-				} else if (data.syncState !== 'pending') {
-					finish({ state: data.syncState, error: data.syncError, data });
-				}
-			},
-			(err) => finish({ state: 'error', error: err.message }),
-		);
-		function finish(result) {
-			clearTimeout(timer);
-			unsub();
-			resolve(result);
-		}
-		timer = setTimeout(() => finish({ state: 'timeout' }), timeoutMs);
-	});
+export function waitForSync(collectionName, externalId, timeoutMs = 90000) {
+  return new Promise((resolve) => {
+    let unsubscribe;
+    let finished = false;
+    const finish = (result) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      unsubscribe?.();
+      resolve(result);
+    };
+    const check = async () => {
+      try {
+        const record = await findRecord(collectionName, externalId);
+        if (!record) return finish({ state: 'gone' });
+        if (record.syncState !== 'pending') finish({ state: record.syncState, error: record.syncError, data: normalizeRecord(record) });
+      } catch (error) {
+        finish({ state: 'error', error: error.message });
+      }
+    };
+    const timer = setTimeout(() => finish({ state: 'timeout' }), timeoutMs);
+    pb.collection(collectionName).subscribe('*', ({ record }) => {
+      if (record?.recordKey === externalId) check();
+    }).then((stop) => {
+      if (finished) stop();
+      else unsubscribe = stop;
+    }).catch((error) => finish({ state: 'error', error: error.message }));
+    check();
+  });
 }

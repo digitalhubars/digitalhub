@@ -47,7 +47,7 @@ function blockedReason({ profile, role, client, user, settings, isPreview }) {
         ? { title: 'No client selected', body: 'Create a client first.' }
         : {
             title: 'Your account isn’t linked to a client yet',
-            body: `Your admin needs to connect you to your company’s stores. ${contact} Setting up this workspace as its owner? Open the confirmation email we sent you, then reload this page.`,
+            body: `Your admin needs to connect you to your company’s stores. ${contact}`,
           };
     }
     if (client.status === 'suspended') return { title: 'This client account is suspended', body: contact };

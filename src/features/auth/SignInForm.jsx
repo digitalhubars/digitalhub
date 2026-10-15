@@ -39,6 +39,7 @@ export default function SignInForm() {
     try {
       await signIn(form.email, form.password);
     } catch (err) {
+      console.error('PocketBase sign-in failed:', err);
       setBusy(false);
       return setError(authMessage(err));
     }

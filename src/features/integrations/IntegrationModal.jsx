@@ -99,9 +99,13 @@ export default function IntegrationModal({ store, onClose }) {
     if (usesOAuth) {
       saveStore({ ...base, url: store.url || '', region, keyHint: 'Not connected' }, isNew, form.clientId);
     } else {
-      // The keys go to storeSecrets (write-only from the browser); only the last 4 characters are shown here.
+      // Keys are stored in the admin-only PocketBase collection; only the last 4 characters are shown here.
       const secret = isShopify ? form.token : form.consumerKey.trim();
-      const credentials = !isShopify && secret ? { consumerKey: secret, consumerSecret: form.consumerSecret.trim() } : undefined;
+      const credentials = !secret
+        ? undefined
+        : isShopify
+          ? { token: secret }
+          : { consumerKey: secret, consumerSecret: form.consumerSecret.trim() };
       const { accountId: _a, region: _r, ...rest } = base;
       saveStore(
         {

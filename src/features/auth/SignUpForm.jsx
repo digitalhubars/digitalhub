@@ -38,6 +38,7 @@ export default function SignUpForm() {
     try {
       await signUp({ email: form.email, password: form.password, fullName: form.name });
     } catch (err) {
+      console.error('PocketBase sign-up failed:', err);
       setBusy(false);
       return setError(authMessage(err));
     }
@@ -55,7 +56,7 @@ export default function SignUpForm() {
   return (
     <AuthShell
       title="Create an account"
-      description="The first account in a new workspace becomes the admin. Everyone after that gets access from the admin."
+      description="New accounts start with client access. Your admin can assign a client account and stores."
       footer={
         <>
           Already have an account?{' '}

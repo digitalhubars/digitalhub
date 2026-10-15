@@ -7,4 +7,3 @@ dist
 .env*.local
 firestore-debug.log
 ui-debug.log
-.emulator-data

@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { doc, onSnapshot } from '../../lib/pocketbase';
 import { parseRoute } from '../../config/navigation';
 import { AppProvider } from '../../context/AppContext';
 import { authMessage, ensureProfile, watchAuth } from '../../lib/auth';
-import { fb, pbConfigured } from '../../lib/pocketbase';
+import { pb, pbConfigured } from '../../lib/pocketbase';
 import AccountBlocked from '../auth/AccountBlocked';
 import AuthShell from '../auth/AuthShell';
 import SetupNotice from '../auth/SetupNotice';
@@ -29,15 +28,27 @@ export default function AppRoot() {
       setProfile(authUser === null ? null : undefined);
       return undefined;
     }
-    // Creates the profile on first sign-in, and promotes the owner once their email is confirmed.
-    ensureProfile(authUser.displayName || '').catch((err) => setError(authMessage(err)));
-    return onSnapshot(
-      doc(fb().db, 'users', authUser.uid),
-      (snap) => {
-        if (snap.exists()) setProfile({ id: snap.id, ...snap.data() });
-      },
-      (err) => setError(authMessage(err)),
-    );
+    let active = true;
+    let unsubscribe;
+    const loadProfile = async () => {
+      try {
+        await ensureProfile(authUser.displayName || '');
+        const record = await pb.collection('users').getOne(authUser.id);
+        if (active) setProfile(record);
+        const stop = await pb.collection('users').subscribe(authUser.id, ({ record: updated }) => {
+          if (active) setProfile(updated);
+        });
+        if (active) unsubscribe = stop;
+        else stop();
+      } catch (err) {
+        if (active) setError(authMessage(err));
+      }
+    };
+    loadProfile();
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
   }, [authUser]);
 
   // Access gate: signed-out → sign-in page; managers and clients → their own dashboard only.
