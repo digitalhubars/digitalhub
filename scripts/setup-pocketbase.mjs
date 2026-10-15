@@ -139,7 +139,7 @@ const collectionSpecs = [
   },
 ];
 
-const summary = { created: [], updated: [], unchanged: [], migratedClientRoles: 0, repairedUserStatuses: 0, permissionsCreated: 0, permissionsUpdated: 0 };
+const summary = { created: [], updated: [], unchanged: [], migratedClientRoles: 0, repairedUserStatuses: 0, permissionsCreated: 0, permissionsUpdated: 0, emptyPermissionsRepaired: 0 };
 const collectionApi = pb.collection('_collections');
 
 async function findCollection(name) {
@@ -202,30 +202,48 @@ for (const user of existingUsers) {
 }
 
 const roleAccessApi = pb.collection('role_access');
+const permissionRecords = await roleAccessApi.getFullList();
+const unusedEmptyRecords = permissionRecords.filter((record) => !record.role && !record.page);
+
 for (const role of ['admin', 'manager', 'staff']) {
   for (const page of pageKeys) {
     const permission = defaultPermission(role, page);
-    let existing = null;
-    try {
-      existing = await roleAccessApi.getFirstListItem(pb.filter('role = {:role} && page = {:page}', { role, page }));
-    } catch (error) {
-      if (error?.status !== 404) throw error;
+    let existing = permissionRecords.find((record) => record.role === role && record.page === page);
+    let reusedEmptyRecord = false;
+
+    if (!existing && unusedEmptyRecords.length) {
+      existing = unusedEmptyRecords.shift();
+      reusedEmptyRecord = true;
     }
 
     const effectivePermission = !existing || role === 'admin'
       ? permission
       : role === 'manager'
-        ? { canView: existing.canView, canEdit: existing.canEdit, canDelete: false }
-        : { canView: existing.canView, canEdit: false, canDelete: false };
+        ? {
+          canView: typeof existing.canView === 'boolean' ? existing.canView : permission.canView,
+          canEdit: typeof existing.canEdit === 'boolean' ? existing.canEdit : permission.canEdit,
+          canDelete: false,
+        }
+        : {
+          canView: typeof existing.canView === 'boolean' ? existing.canView : permission.canView,
+          canEdit: false,
+          canDelete: false,
+        };
     const data = { role, page, ...effectivePermission };
     if (existing) {
       const changed = ['canView', 'canEdit', 'canDelete'].some((key) => existing[key] !== effectivePermission[key]);
       if (changed) {
         await roleAccessApi.update(existing.id, data);
         summary.permissionsUpdated += 1;
+      } else if (reusedEmptyRecord) {
+        await roleAccessApi.update(existing.id, data);
+        summary.permissionsUpdated += 1;
       }
+      if (reusedEmptyRecord) summary.emptyPermissionsRepaired += 1;
+      if (reusedEmptyRecord) permissionRecords.push({ ...existing, ...data });
     } else {
-      await roleAccessApi.create(data);
+      const created = await roleAccessApi.create(data);
+      permissionRecords.push(created);
       summary.permissionsCreated += 1;
     }
   }
@@ -239,4 +257,5 @@ console.log(`Legacy client roles migrated to staff: ${summary.migratedClientRole
 console.log(`User statuses repaired to active: ${summary.repairedUserStatuses}`);
 console.log(`Role permissions created: ${summary.permissionsCreated}`);
 console.log(`Role permissions updated: ${summary.permissionsUpdated}`);
+console.log(`Empty role_access records repaired: ${summary.emptyPermissionsRepaired}`);
 console.log('No collections or records were deleted.');
