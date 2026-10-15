@@ -21,7 +21,7 @@ export default function DashboardRedirect() {
       if (!user) return router.replace('/signin');
       try {
         const { role } = await ensureProfile(user.displayName || '');
-        return router.replace(`/${role}`);
+        return router.replace(`/${role || 'staff'}`);
       } catch (err) {
         return setError(authMessage(err));
       }

@@ -52,7 +52,8 @@ function WorkspaceDataCard() {
 }
 
 export default function GeneralTab() {
-  const { settings, updateSettings } = useApp();
+  const { settings, updateSettings, canEditPage } = useApp();
+  const editable = canEditPage('settings.general');
   const [form, setForm] = useState(settings);
   const bind = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
   const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
@@ -63,28 +64,30 @@ export default function GeneralTab() {
       <Card title="Workspace">
         <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
           <Field label="Workspace name" hint="Shown in the sidebar and emails.">
-            <input className={ui.input} value={form.workspaceName} onChange={bind('workspaceName')} />
+            <input className={ui.input} value={form.workspaceName} onChange={bind('workspaceName')} disabled={!editable} />
           </Field>
           <Field label="Support email" hint="Clients see this on their dashboard.">
-            <input className={ui.input} value={form.supportEmail} onChange={bind('supportEmail')} />
+            <input className={ui.input} value={form.supportEmail} onChange={bind('supportEmail')} disabled={!editable} />
           </Field>
           <Field label="Currency">
-            <Select value={form.currency} onChange={set('currency')} options={CURRENCIES.map((c) => ({ value: c, label: c }))} />
+            <Select value={form.currency} onChange={set('currency')} options={CURRENCIES.map((c) => ({ value: c, label: c }))} disabled={!editable} />
           </Field>
           <Field label="Time zone">
-            <Select value={form.timezone} onChange={set('timezone')} options={TIMEZONES.map((t) => ({ value: t, label: t.replace('_', ' ') }))} />
+            <Select value={form.timezone} onChange={set('timezone')} options={TIMEZONES.map((t) => ({ value: t, label: t.replace('_', ' ') }))} disabled={!editable} />
           </Field>
           <Field label="Date format">
-            <Select value={form.dateFormat} onChange={set('dateFormat')} options={DATE_FORMATS.map((d) => ({ value: d, label: d }))} />
+            <Select value={form.dateFormat} onChange={set('dateFormat')} options={DATE_FORMATS.map((d) => ({ value: d, label: d }))} disabled={!editable} />
           </Field>
           <Field label="Low stock alert below" hint="Used for dashboard alerts and the low stock filter.">
-            <input type="number" min="1" className={ui.input} value={form.lowStockThreshold} onChange={bind('lowStockThreshold')} />
+            <input type="number" min="1" className={ui.input} value={form.lowStockThreshold} onChange={bind('lowStockThreshold')} disabled={!editable} />
           </Field>
         </div>
-        <SaveBar
-          dirty={dirty}
-          onSave={() => updateSettings({ ...form, lowStockThreshold: Math.max(1, Number(form.lowStockThreshold) || 1) }, 'Workspace settings saved')}
-        />
+        {editable && (
+          <SaveBar
+            dirty={dirty}
+            onSave={() => updateSettings({ ...form, lowStockThreshold: Math.max(1, Number(form.lowStockThreshold) || 1) }, 'Workspace settings saved')}
+          />
+        )}
       </Card>
       <WorkspaceDataCard />
     </div>

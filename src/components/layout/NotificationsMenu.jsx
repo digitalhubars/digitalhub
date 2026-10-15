@@ -6,7 +6,7 @@ import { ui } from '../../styles/ui';
 import Dropdown from '../ui/Dropdown';
 
 export default function NotificationsMenu() {
-  const { notifications, markAllRead } = useApp();
+  const { notifications, markAllRead, canEditPage } = useApp();
   const [open, setOpen] = useState(false);
   const unread = notifications.filter((n) => !n.read).length;
 
@@ -28,7 +28,7 @@ export default function NotificationsMenu() {
     >
       <div className="flex items-center justify-between px-2.5 py-1.5">
         <p className={`text-xs font-medium uppercase tracking-wide ${ui.muted}`}>Notifications</p>
-        {unread > 0 && (
+        {unread > 0 && canEditPage('notifications') && (
           <button type="button" onClick={markAllRead} className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
             Mark all as read
           </button>

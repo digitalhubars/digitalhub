@@ -1,7 +1,7 @@
 import { DASHBOARDS, NAV_ITEMS, SETTINGS_TABS } from '../../../../config/navigation';
 
-// Every dashboard URL is generated ahead of time for static hosting:
-// /admin, /admin/products, /admin/settings/users, /manager/orders, …
+// Every role route is generated ahead of time for static hosting:
+// /admin, /manager/products, /staff/settings/access, /staff/role-access, …
 export const dynamicParams = false;
 
 export function generateStaticParams() {

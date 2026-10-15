@@ -1,25 +1,22 @@
-import { DEFAULT_CLIENT_PERMISSIONS } from '../data/clients';
+export const ROLE_LABELS = { admin: 'Admin', manager: 'Manager', staff: 'Staff' };
 
-export const ROLE_LABELS = { admin: 'Admin', manager: 'Manager', client: 'Client' };
+export const ALL_ROLES = ['admin', 'manager', 'staff'];
 
-export const ALL_ROLES = ['admin', 'manager', 'client'];
+export function getAccess(role, client, permissions = {}) {
+  const page = (key) => permissions[key] || {};
+  const staffClientPermissions = role === 'staff' ? client?.permissions : null;
+  const mayEditRecords = role === 'admin' || role === 'manager';
+  const products = page('products');
+  const orders = page('orders');
+  const customers = page('customers');
 
-// What the signed-in role can do. Clients get the permissions set on their account.
-export function getAccess(role, client) {
-  if (role === 'admin') {
-    return { editProducts: true, addProducts: true, deleteProducts: true, editOrders: true, viewCustomers: true, exportData: true, manageSystem: true };
-  }
-  if (role === 'manager') {
-    return { editProducts: true, addProducts: true, deleteProducts: false, editOrders: true, viewCustomers: true, exportData: true, manageSystem: false };
-  }
-  const p = client?.permissions || DEFAULT_CLIENT_PERMISSIONS;
   return {
-    editProducts: p.editProducts,
-    addProducts: p.addProducts,
-    deleteProducts: false,
-    editOrders: false,
-    viewCustomers: p.viewCustomers,
-    exportData: p.exportData,
-    manageSystem: false,
+    editProducts: mayEditRecords && products.canEdit === true && staffClientPermissions?.editProducts !== false,
+    addProducts: mayEditRecords && products.canEdit === true && staffClientPermissions?.addProducts !== false,
+    deleteProducts: role === 'admin' && products.canDelete === true,
+    editOrders: mayEditRecords && orders.canEdit === true,
+    viewCustomers: customers.canView === true && staffClientPermissions?.viewCustomers !== false,
+    exportData: [products, orders, customers].some((item) => item.canEdit === true) && staffClientPermissions?.exportData !== false,
+    manageSystem: role === 'admin',
   };
 }

@@ -42,8 +42,8 @@ export default function MyAccessTab() {
             </li>
           ))}
         </ul>
-        {role === 'client' && (
-          <p className={`border-t px-5 py-3 text-xs ${ui.line} ${ui.muted}`}>Need more access? Contact your account manager. Account: {client?.company}</p>
+        {role === 'staff' && (
+          <p className={`border-t px-5 py-3 text-xs ${ui.line} ${ui.muted}`}>Need more access? Contact your admin. Account: {client?.company}</p>
         )}
       </Card>
     </div>

@@ -18,10 +18,11 @@ import ManagerDashboard from '../dashboard/ManagerDashboard';
 import IntegrationsPage from '../integrations/IntegrationsPage';
 import OrdersPage from '../orders/OrdersPage';
 import ProductsPage from '../products/ProductsPage';
+import RoleAccessPage from '../settings/RoleAccessPage';
 import SettingsPage from '../settings/SettingsPage';
 
 // Each role has its own dashboard; the other pages filter by role internally.
-const DASHBOARDS = { admin: AdminDashboard, manager: ManagerDashboard, client: ClientDashboard };
+const DASHBOARDS = { admin: AdminDashboard, manager: ManagerDashboard, staff: ClientDashboard };
 
 const PAGES = {
   products: ProductsPage,
@@ -29,6 +30,7 @@ const PAGES = {
   customers: CustomersPage,
   clients: ClientsPage,
   integrations: IntegrationsPage,
+  'role-access': RoleAccessPage,
   settings: SettingsPage,
   profile: ProfilePage,
   password: PasswordPage,
@@ -41,7 +43,7 @@ const MANAGER_FILTER_PAGES = ['dashboard', 'products', 'orders', 'customers'];
 function blockedReason({ profile, role, client, user, settings, isPreview }) {
   const contact = `Contact ${settings.supportEmail} or your admin.`;
   if (profile.status === 'suspended') return { title: 'Your account is suspended', body: contact };
-  if (role === 'client') {
+  if (role === 'staff') {
     if (!client) {
       return isPreview
         ? { title: 'No client selected', body: 'Create a client first.' }
@@ -77,14 +79,14 @@ function PageContent() {
             </Button>
           }
         >
-          You&apos;re viewing the {ROLE_LABELS[role]} dashboard{role === 'client' && client ? ` for ${client.company}` : user.name ? ` as ${user.name}` : ''}.
+          You&apos;re viewing the {ROLE_LABELS[role]} dashboard{role === 'staff' && client ? ` for ${client.company}` : user.name ? ` as ${user.name}` : ''}.
         </Callout>
       )}
       {blocked ? (
         <AccountBlocked title={blocked.title} body={blocked.body} showSignOut={!isPreview} />
       ) : (
         <>
-          {role === 'client' && client.status === 'invited' && (
+          {role === 'staff' && client.status === 'invited' && (
             <Callout icon={Mail} tone="info">
               {client.contact} hasn’t accepted the invite yet. This is what they’ll see after signing in.
             </Callout>

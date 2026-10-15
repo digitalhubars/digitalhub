@@ -31,8 +31,8 @@ const TAB_CONTENT = {
 };
 
 export default function SettingsPage() {
-  const { role, settingsTab, go } = useApp();
-  const tabs = settingsTabsFor(role);
+  const { role, settingsTab, go, rolePermissions } = useApp();
+  const tabs = settingsTabsFor(role, rolePermissions);
   const current = tabs.find((t) => t.key === settingsTab) || tabs[0];
   const Content = TAB_CONTENT[current.key];
 

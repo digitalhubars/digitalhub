@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { call, pb, saveRecord } from '../lib/pocketbase';
 import { defaultSettings, isOAuthPlatform, PLATFORMS, sessions as initialSessions } from '../data';
-import { canVisitPage, routePath, settingsTabsFor } from '../config/navigation';
+import { canVisitPage, NAV_ITEMS, routePath, settingsTabsFor } from '../config/navigation';
 import { getAccess } from '../config/roles';
 import { signOut as appSignOut, updateOwnProfile, authMessage } from '../lib/auth';
 import { useLiveDoc, useLiveList, waitForSync } from '../lib/live';
@@ -30,9 +30,9 @@ const callError = (err) =>
  * route:    { env, page, tab } parsed from the URL; `env` is the dashboard being viewed
  * navigate: (path, { replace }) => void
  */
-export function AppProvider({ children, profile: initialProfile, route, navigate }) {
+export function AppProvider({ children, profile: initialProfile, route, navigate, rolePermissions = {} }) {
   // ---- Session -------------------------------------------------------------
-  // `realRole` comes from Firestore (set only by Cloud Functions).
+  // `realRole` comes from the signed-in user's PocketBase record.
   // `role` is the dashboard on screen: always realRole, except admins can open any.
   const [profile, setProfile] = useState(initialProfile);
   useEffect(() => setProfile(initialProfile), [initialProfile]);
@@ -75,7 +75,7 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
     'clients',
     isAdmin
       ? [{ key: 'all', collection: 'clients' }]
-      : realRole === 'client' && myClient
+      : realRole === 'staff' && myClient
         ? [{ key: myClient, collection: 'clients', filter: pb.filter('recordKey = {:id}', { id: myClient }) }]
         : [],
     live,
@@ -196,7 +196,7 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
   const previewManagerId = viewAs.manager || team.find((m) => m.role === 'manager')?.id;
 
   const client =
-    role !== 'client'
+    role !== 'staff'
       ? null
       : isPreview
         ? clients.find((c) => c.id === previewClientId) || null
@@ -217,7 +217,8 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
   }, [profile, isPreview, role, team, previewManagerId, client]);
 
   const user = { ...currentUser, role };
-  const access = getAccess(role, client);
+  const access = getAccess(role, client, rolePermissions);
+  const canEditPage = (pageKey) => rolePermissions[pageKey]?.canEdit === true && (role !== 'staff' || ['profile', 'password', 'settings.appearance'].includes(pageKey));
 
   const scopedStores = useMemo(() => {
     if (role === 'admin') return stores;
@@ -260,23 +261,32 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
 
   // ---- Navigation ----------------------------------------------------------
   const go = (target, tab) => {
-    const next = canVisitPage(target, access) ? target : 'dashboard';
+    const next = canVisitPage(target, access, rolePermissions, role) ? target : firstAccessiblePage();
     navigate(routePath(role, next, next === 'settings' ? tab : null));
     setDrawer(null);
     mainRef.current?.scrollTo?.({ top: 0 });
+  };
+
+  const firstAccessiblePage = () => {
+    const firstItem = NAV_ITEMS.find((item) => canVisitPage(item.key, access, rolePermissions, role));
+    if (firstItem) return firstItem.key;
+    if (settingsTabsFor(role, rolePermissions).length) return 'settings';
+    if (canVisitPage('profile', access, rolePermissions, role)) return 'profile';
+    return 'dashboard';
   };
 
   // Keep the URL valid for whoever is looking.
   useEffect(() => {
     if (!isAdmin && route.env !== realRole) {
       navigate(routePath(realRole), { replace: true });
-    } else if (!canVisitPage(page, access)) {
-      navigate(routePath(role), { replace: true });
-    } else if (page === 'settings' && settingsTab && !settingsTabsFor(role).some((t) => t.key === settingsTab)) {
-      navigate(routePath(role, 'settings'), { replace: true });
+    } else if (!canVisitPage(page, access, rolePermissions, role)) {
+      navigate(routePath(role, firstAccessiblePage()), { replace: true });
+    } else if (page === 'settings' && settingsTab && !settingsTabsFor(role, rolePermissions).some((t) => t.key === settingsTab)) {
+      const firstTab = settingsTabsFor(role, rolePermissions)[0];
+      navigate(firstTab ? routePath(role, 'settings', firstTab.key) : routePath(role, firstAccessiblePage()), { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route.env, page, settingsTab, role, access.manageSystem, access.viewCustomers]);
+  }, [route.env, page, settingsTab, role, access.manageSystem, access.viewCustomers, rolePermissions]);
 
   useEffect(() => setDrawer(null), [role, viewAs.client]);
 
@@ -324,7 +334,7 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
       return undefined; // reportWriteError already showed why
     }
     log(`${isNew ? 'Added' : 'Updated'} ${record.title} in ${store.name}`, 'product');
-    if (role === 'client' && settings.notify.clientActivity) notify(`${client?.company} ${isNew ? 'added' : 'updated'} ${record.title}`, 'success');
+    if (role === 'staff' && settings.notify.clientActivity) notify(`${client?.company} ${isNew ? 'added' : 'updated'} ${record.title}`, 'success');
     if (record.stock != null && record.stock < settings.lowStockThreshold && (isNew || previous.stock == null || previous.stock >= settings.lowStockThreshold) && settings.notify.lowStock) {
       notify(`${record.title} is low on stock (${record.stock} left).`, 'warning');
     }
@@ -560,7 +570,7 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
   };
 
   const updateProfile = async (next) => {
-    if (isPreview && role === 'client' && client) {
+    if (isPreview && role === 'staff' && client) {
       setClients((list) => list.map((c) => (c.id === client.id ? { ...c, contact: next.name, email: next.email, phone: next.phone } : c))).catch(() => {});
       return showToast({ title: 'Client contact saved', body: client.company });
     }
@@ -621,7 +631,7 @@ export function AppProvider({ children, profile: initialProfile, route, navigate
   const value = {
     // identity
     profile, realRole, isAdmin, isPreview,
-    role, setRole, viewAs, setViewAs, user, client, access, signOut,
+    role, setRole, viewAs, setViewAs, user, client, access, rolePermissions, canEditPage, signOut,
     // records
     stores, groups, scopedStores, storeIds, selectedStores, setSelectedStores, storeOf, customerOf,
     products, orders, customers, clients, team, users, settings, activity, notifications, sessions, setSessions,

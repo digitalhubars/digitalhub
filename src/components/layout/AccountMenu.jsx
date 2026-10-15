@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { KeyRound, LifeBuoy, LogOut, Moon, Settings, Sun, UserRound } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { ROLE_LABELS } from '../../config/roles';
+import { canVisitPage } from '../../config/navigation';
 import { initials } from '../../lib/format';
 import { ui } from '../../styles/ui';
 import Dropdown from '../ui/Dropdown';
 
 export default function AccountMenu() {
-  const { user, role, dark, toggleTheme, go, signOut } = useApp();
+  const { user, role, dark, toggleTheme, go, signOut, access, rolePermissions } = useApp();
   const [open, setOpen] = useState(false);
 
   const item = (label, Icon, onClick, danger) => (
@@ -51,11 +52,11 @@ export default function AccountMenu() {
         <p className={`truncate text-sm font-medium ${ui.h}`}>{user.name}</p>
         <p className={`truncate text-xs ${ui.muted}`}>{user.email}</p>
       </div>
-      {item('Profile', UserRound, () => go('profile'))}
-      {item('Reset password', KeyRound, () => go('password'))}
-      {item('Settings', Settings, () => go('settings'))}
+      {canVisitPage('profile', access, rolePermissions, role) && item('Profile', UserRound, () => go('profile'))}
+      {canVisitPage('password', access, rolePermissions, role) && item('Reset password', KeyRound, () => go('password'))}
+      {canVisitPage('settings', access, rolePermissions, role) && item('Settings', Settings, () => go('settings'))}
       {item(dark ? 'Light mode' : 'Dark mode', dark ? Sun : Moon, toggleTheme)}
-      {item('Help & support', LifeBuoy, () => go('settings', 'support'))}
+      {rolePermissions['settings.support']?.canView && item('Help & support', LifeBuoy, () => go('settings', 'support'))}
       <div className={`my-1 border-t ${ui.line}`} />
       {item('Sign out', LogOut, signOut, true)}
     </Dropdown>

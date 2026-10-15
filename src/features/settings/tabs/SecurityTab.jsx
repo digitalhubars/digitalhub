@@ -11,7 +11,7 @@ import { ui } from '../../../styles/ui';
 import CopyField from '../CopyField';
 
 export default function SecurityTab() {
-  const { settings, updateSettings, sessions, setSessions, showToast, go } = useApp();
+  const { settings, updateSettings, sessions, setSessions, showToast, go, canEditPage } = useApp();
   const [setupOpen, setSetupOpen] = useState(false);
   const [code, setCode] = useState('');
 
@@ -30,6 +30,7 @@ export default function SecurityTab() {
             label="Two-step verification"
             hint="Ask for a code from an authenticator app when signing in."
             checked={settings.twoFactor}
+            disabled={!canEditPage('settings.security')}
             onChange={(on) => (on ? setSetupOpen(true) : updateSettings({ twoFactor: false }, 'Two-step verification turned off'))}
           />
           <div className="flex items-center justify-between gap-4 py-3">
@@ -37,7 +38,7 @@ export default function SecurityTab() {
               <span className={`block text-sm font-medium ${ui.h}`}>Password</span>
               <span className={`block text-xs ${ui.muted}`}>Change it any time.</span>
             </span>
-            <Button size="sm" onClick={() => go('password')}>
+            <Button size="sm" disabled={!canEditPage('password')} onClick={() => go('password')}>
               <KeyRound size={12} /> Change
             </Button>
           </div>
@@ -47,7 +48,7 @@ export default function SecurityTab() {
       <Card
         title="Where you're signed in"
         action={
-          sessions.length > 1 && (
+          sessions.length > 1 && canEditPage('settings.security') && (
             <button
               type="button"
               onClick={() => {
@@ -76,6 +77,7 @@ export default function SecurityTab() {
               ) : (
                 <Button
                   size="sm"
+                  disabled={!canEditPage('settings.security')}
                   onClick={() => {
                     setSessions((list) => list.filter((x) => x.id !== s.id));
                     showToast({ title: `Signed out of ${s.device}` });

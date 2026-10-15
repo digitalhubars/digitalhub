@@ -21,7 +21,7 @@ import { ui } from '../../../styles/ui';
 const ROLE_HINTS = {
   admin: 'Every store, every setting, and can switch to any dashboard.',
   manager: 'Only the stores in one store group.',
-  client: 'Only the stores of one client account.',
+  staff: 'Assigned pages and the stores of one client account.',
 };
 
 // Role + what it links to. Shared by the add and edit forms.
@@ -33,7 +33,7 @@ function AccessFields({ form, setForm }) {
         <Select
           value={form.role}
           onChange={(v) => setForm((f) => ({ ...f, role: v }))}
-          options={['admin', 'manager', 'client'].map((r) => ({ value: r, label: ROLE_LABELS[r] }))}
+          options={['admin', 'manager', 'staff'].map((r) => ({ value: r, label: ROLE_LABELS[r] }))}
         />
       </Field>
       {form.role === 'manager' && (
@@ -41,7 +41,7 @@ function AccessFields({ form, setForm }) {
           <Select value={form.group_id} onChange={(v) => setForm((f) => ({ ...f, group_id: v }))} options={groups.map((g) => ({ value: g.id, label: g.name }))} />
         </Field>
       )}
-      {form.role === 'client' && (
+      {form.role === 'staff' && (
         <Field label="Client account" hint="They see only this client’s stores, with its permissions.">
           <Select value={form.client_id} onChange={(v) => setForm((f) => ({ ...f, client_id: v }))} options={clients.map((c) => ({ value: c.id, label: c.company }))} />
         </Field>
@@ -53,7 +53,7 @@ function AccessFields({ form, setForm }) {
 const accessPatch = (form) => ({
   role: form.role,
   group_id: form.role === 'manager' ? form.group_id : null,
-  client_id: form.role === 'client' ? form.client_id : null,
+  client_id: form.role === 'staff' ? form.client_id : null,
 });
 
 function EditUserModal({ account, onClose, onSaved }) {
@@ -117,7 +117,7 @@ function EditUserModal({ account, onClose, onSaved }) {
 
 function AddUserModal({ onClose, onSaved }) {
   const { groups, clients } = useApp();
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'client', group_id: groups[0]?.id || '', client_id: clients[0]?.id || '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'staff', group_id: groups[0]?.id || '', client_id: clients[0]?.id || '' });
   const [error, setError] = useState('');
   const bind = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -217,8 +217,8 @@ export default function UsersTab() {
       }
     >
       <p className={`px-4 pt-4 text-sm sm:px-5 ${ui.muted}`}>
-        People who sign up themselves start as clients with no stores. Give managers a store group and clients a client account so they can see their
-        dashboard. Sign-in is handled by PocketBase; suspended accounts can’t sign in.
+        People who sign up themselves have no role until an admin assigns one. Give managers a store group and staff a client account so they can see
+        their dashboard. Sign-in is handled by PocketBase; suspended accounts can’t sign in.
       </p>
       <DataTable
         rows={accounts}

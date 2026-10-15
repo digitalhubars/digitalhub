@@ -13,7 +13,7 @@ const FAQ = [
 ];
 
 export default function SupportTab() {
-  const { settings, showToast, user } = useApp();
+  const { settings, showToast, user, canEditPage } = useApp();
   const [form, setForm] = useState({ subject: '', message: '' });
 
   const submit = (e) => {
@@ -36,9 +36,7 @@ export default function SupportTab() {
           <Field label="Message">
             <textarea rows={4} className={ui.input} value={form.message} onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))} />
           </Field>
-          <Button type="submit" variant="primary">
-            Send message
-          </Button>
+          {canEditPage('settings.support') && <Button type="submit" variant="primary">Send message</Button>}
         </form>
       </Card>
       <Card title="Common questions">

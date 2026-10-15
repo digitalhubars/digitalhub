@@ -25,6 +25,33 @@ npm run dev
 npm run build
 ```
 
+## PocketBase role setup
+
+Create or repair the collections, API rules, and default `admin`, `manager`, and `staff` page permissions with the idempotent setup script. It only reads superuser credentials from the environment; never put them in `.env.local`, frontend code, or any `NEXT_PUBLIC_*` variable.
+
+PowerShell:
+
+```powershell
+$env:PB_URL = "https://pocketbase-railway-production-b1cb.up.railway.app"
+$env:PB_ADMIN_EMAIL = "your-superuser-email"
+$env:PB_ADMIN_PASSWORD = "your-superuser-password"
+node scripts/setup-pocketbase.mjs
+```
+
+Bash:
+
+```bash
+PB_URL="https://your-pocketbase-host" PB_ADMIN_EMAIL="your-superuser-email" PB_ADMIN_PASSWORD="your-superuser-password" node scripts/setup-pocketbase.mjs
+```
+
+The setup script logs in through PocketBase's `_superusers` collection. It adds/repairs fields and rules, seeds missing role/page rows, preserves existing records and valid manager/staff permissions, enforces admin-full/manager-no-delete/staff-view-only invariants, and prints a change summary. Review and run it only from a trusted machine with superuser access.
+
+## App routes and collections
+
+The static app exports `/`, `/signin`, `/signup`, `/forgot-password`, and these signed-in routes under `/admin`, `/manager`, and `/staff`: the dashboard, products, orders, customers, clients, integrations, settings, profile, password, and role access. Settings subroutes include general, users, clients, groups, syncing, webhooks, my access, notifications, appearance, security, activity, and support; route access is controlled by `role_access`.
+
+The app uses the PocketBase collections `users`, `role_access`, `workspace`, `groups`, `clients`, `stores`, `products`, `orders`, `customers`, `activity`, `notifications`, and `storeSecrets`.
+
 ## Notes
 
 - The previous backend and config values were removed.

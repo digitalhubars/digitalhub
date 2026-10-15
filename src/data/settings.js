@@ -10,7 +10,6 @@ export const defaultSettings = {
   syncFields: { title: true, price: true, stock: true, status: true },
   autoRetry: true,
   webhookUrl: 'https://hooks.digitalhub.app/sync',
-  webhookSecret: 'whsec_9f3c1a7e52b84d06',
   notify: { newOrder: true, lowStock: true, syncFailed: true, weeklySummary: false, clientActivity: true },
   twoFactor: false,
 };

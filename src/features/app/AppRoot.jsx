@@ -6,8 +6,10 @@ import { parseRoute } from '../../config/navigation';
 import { AppProvider } from '../../context/AppContext';
 import { authMessage, ensureProfile, watchAuth } from '../../lib/auth';
 import { pb, pbConfigured } from '../../lib/pocketbase';
+import { hasAnyRoleAccess, useRoleAccess } from '../../lib/roles';
 import AccountBlocked from '../auth/AccountBlocked';
 import AuthShell from '../auth/AuthShell';
+import NoAccessPage from '../auth/NoAccessPage';
 import SetupNotice from '../auth/SetupNotice';
 import AppShell from './AppShell';
 import { Loading } from './ClientApp';
@@ -19,6 +21,7 @@ export default function AppRoot() {
   const [authUser, setAuthUser] = useState(undefined); // undefined = still checking
   const [profile, setProfile] = useState(undefined);
   const [error, setError] = useState('');
+  const { permissions: rolePermissions, loading: roleAccessLoading } = useRoleAccess(profile?.role);
 
   useEffect(() => (pbConfigured ? watchAuth((u) => setAuthUser(u)) : undefined), []);
 
@@ -53,13 +56,13 @@ export default function AppRoot() {
 
   // Access gate: signed-out → sign-in page; managers and clients → their own dashboard only.
   const env = pathname.split('/').filter(Boolean)[0];
-  const wrongDashboard = profile && profile.role !== 'admin' && env !== profile.role;
+  const wrongDashboard = profile?.role && profile.role !== 'admin' && env !== profile.role;
   useEffect(() => {
     if (authUser === null) router.replace(`/signin?next=${encodeURIComponent(pathname)}`);
     else if (wrongDashboard) router.replace(`/${profile.role}`);
   }, [authUser, wrongDashboard, profile, pathname, router]);
 
-  const route = useMemo(() => parseRoute(pathname, profile?.role || 'client'), [pathname, profile?.role]);
+  const route = useMemo(() => parseRoute(pathname, profile?.role || 'staff'), [pathname, profile?.role]);
   const navigate = useCallback((path, { replace = false } = {}) => (replace ? router.replace(path) : router.push(path)), [router]);
 
   if (!pbConfigured) {
@@ -76,10 +79,13 @@ export default function AppRoot() {
       </AuthShell>
     );
   }
+  if (profile && !profile.role) return <NoAccessPage />;
+  if (profile?.role && roleAccessLoading) return <Loading />;
+  if (profile?.role && !hasAnyRoleAccess(profile.role, rolePermissions)) return <NoAccessPage />;
   if (!profile || wrongDashboard) return <Loading />;
 
   return (
-    <AppProvider profile={profile} route={route} navigate={navigate}>
+    <AppProvider profile={profile} route={route} navigate={navigate} rolePermissions={rolePermissions}>
       <AppShell />
     </AppProvider>
   );

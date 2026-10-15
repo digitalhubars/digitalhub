@@ -1,6 +1,6 @@
 import { X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { NAV_ITEMS } from '../../config/navigation';
+import { canVisitPage, NAV_ITEMS } from '../../config/navigation';
 import { ui } from '../../styles/ui';
 import Select from '../ui/Select';
 import Logo from './Logo';
@@ -8,12 +8,12 @@ import Logo from './Logo';
 const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin dashboard' },
   { value: 'manager', label: 'Manager dashboard' },
-  { value: 'client', label: 'Client dashboard' },
+  { value: 'staff', label: 'Staff dashboard' },
 ];
 
 function SidebarContent({ onNavigate }) {
-  const { page, go, access, role, setRole, isAdmin, team, clients, viewAs, setViewAs, settings } = useApp();
-  const items = NAV_ITEMS.filter((item) => !item.needs || access[item.needs]);
+  const { page, go, access, role, rolePermissions, setRole, isAdmin, team, clients, viewAs, setViewAs, settings } = useApp();
+  const items = NAV_ITEMS.filter((item) => canVisitPage(item.key, access, rolePermissions, role));
   const managers = team.filter((m) => m.role === 'manager');
 
   return (
@@ -46,7 +46,7 @@ function SidebarContent({ onNavigate }) {
         })}
       </nav>
 
-      {/* Admins only: switch between the three dashboards. Managers and clients never see this. */}
+      {/* Admins only: switch between the available dashboards. */}
       {isAdmin && (
       <div className={`space-y-2 border-t p-3 ${ui.line}`}>
         <p className={`px-1 text-xs font-medium ${ui.muted}`}>Switch dashboard</p>
@@ -65,7 +65,7 @@ function SidebarContent({ onNavigate }) {
             options={managers.length ? managers.map((m) => ({ value: m.id, label: m.name })) : [{ value: '', label: 'No managers yet' }]}
           />
         )}
-        {role === 'client' && (
+        {role === 'staff' && (
           <Select
             value={viewAs.client || clients[0]?.id || ''}
             onChange={(id) => setViewAs((v) => ({ ...v, client: id }))}

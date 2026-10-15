@@ -1,17 +1,19 @@
 import { pb } from './pocketbase';
 
 export async function adminCreateUser({ email, password, fullName, role, groupId, clientId }) {
-  const profile = await pb.collection('users').create({
+  const created = await pb.collection('users').create({
     email: email.trim(),
     password,
     passwordConfirm: password,
     full_name: fullName.trim(),
     phone: '',
-    role,
-    group_id: role === 'manager' ? groupId || '' : '',
-    client_id: role === 'client' ? clientId || '' : '',
     status: 'active',
     created_at: new Date().toISOString(),
+  });
+  const profile = await pb.collection('users').update(created.id, {
+    role,
+    group_id: role === 'manager' ? groupId || '' : '',
+    client_id: role === 'staff' ? clientId || '' : '',
   });
   return { uid: profile.id, profile };
 }
@@ -21,7 +23,7 @@ export async function adminUpdateUser(account, { role, groupId, clientId, status
     role,
     status: status === 'suspended' ? 'suspended' : 'active',
     group_id: role === 'manager' ? groupId || '' : '',
-    client_id: role === 'client' ? clientId || '' : '',
+    client_id: role === 'staff' ? clientId || '' : '',
   };
   const losingAdmin = account.role === 'admin' && account.status === 'active' && (next.role !== 'admin' || next.status !== 'active');
   if (losingAdmin && !allUsers.some((user) => user.id !== account.id && user.role === 'admin' && user.status === 'active')) {

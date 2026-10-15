@@ -21,7 +21,7 @@ export async function ensureProfile() {
   const user = getCurrentUser();
   if (!user) throw new Error('Sign in first.');
   const profile = await pb.collection('users').getOne(user.id);
-  return { created: false, role: profile.role || 'client' };
+  return { created: false, role: profile.role || '' };
 }
 
 export const resendVerification = () => Promise.resolve();
@@ -43,9 +43,6 @@ export async function signUp({ email, password, fullName }) {
     passwordConfirm: password,
     full_name: fullNameValue,
     phone: '',
-    role: 'client',
-    group_id: '',
-    client_id: '',
     status: 'active',
     created_at: new Date().toISOString(),
   });
@@ -79,7 +76,7 @@ export async function updateOwnProfile(uid, { full_name, phone, email }) {
   const patch = {
     full_name,
     phone,
-    role: user?.role || 'client',
+    role: user?.role || '',
     group_id: user?.group_id || '',
     client_id: user?.client_id || '',
     status: user?.status || 'active',

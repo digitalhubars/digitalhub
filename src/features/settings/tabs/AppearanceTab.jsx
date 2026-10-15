@@ -10,7 +10,7 @@ const THEMES = [
 ];
 
 export default function AppearanceTab() {
-  const { themePref, setThemePref } = useApp();
+  const { themePref, setThemePref, canEditPage } = useApp();
   return (
     <Card title="Theme">
       <div className="grid gap-3 p-4 sm:grid-cols-3 sm:p-5">
@@ -19,6 +19,7 @@ export default function AppearanceTab() {
             type="button"
             key={value}
             onClick={() => setThemePref(value)}
+            disabled={!canEditPage('settings.appearance')}
             className={`flex flex-col items-center gap-2 rounded-xl border p-4 text-sm font-medium ${
               themePref === value
                 ? 'border-teal-600 bg-teal-50 text-teal-800 dark:border-teal-400 dark:bg-teal-500/10 dark:text-teal-300'

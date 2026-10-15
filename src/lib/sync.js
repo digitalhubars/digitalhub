@@ -20,7 +20,7 @@ export function buildSyncPayload({ event, store, externalId, changes, user, queu
   };
 }
 
-// Mock transport. Replace with a POST to settings.webhookUrl signed with settings.webhookSecret.
+// Mock transport. Replace with a server-side POST that signs requests without exposing a secret to the browser.
 // eslint-disable-next-line no-unused-vars
 export async function sendToStore(payload, settings) {
   console.log('[Digital Hub] two-way sync payload →', payload);

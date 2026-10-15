@@ -45,7 +45,7 @@ export default function OrdersPage() {
     <div className="space-y-4">
       <PageHeader
         title="Orders"
-        description={role === 'client' ? 'Orders placed in your stores. Tap an order for details.' : 'Tap an order to see items and update its status.'}
+        description={role === 'staff' ? 'Orders placed in your stores. Tap an order for details.' : 'Tap an order to see items and update its status.'}
         actions={
           access.exportData && (
             <Button onClick={exportCsv}>
